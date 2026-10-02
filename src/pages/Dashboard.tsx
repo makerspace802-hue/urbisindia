@@ -58,7 +58,7 @@ export default function Dashboard() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[var(--nb-text)] md:text-3xl">
           {displayName}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
@@ -68,7 +68,7 @@ export default function Dashboard() {
               Admin
             </span>
           )}
-          <span className="nb-chip bg-[#1E293B] text-[#10B981]">
+          <span className="nb-chip bg-[var(--nb-surface-2)] text-[#10B981]">
             <MapPin className="size-3.5" strokeWidth={3} />
             {profile?.city || "No city set"}
           </span>
@@ -80,14 +80,14 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4">
           {/* Identity card */}
           <section className="nb-panel">
-            <div className="flex items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+            <div className="nb-subpanel flex items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
               <span className="nb-chip bg-[#10B981] text-[#04110C]">
                 <Building2 className="size-3.5" strokeWidth={3} />
                 Resident Profile
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-5 p-5">
-              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-[#06B6D4] shadow-[4px_4px_0_0_#000]">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden border-2 border-[var(--nb-ink)] bg-[#06B6D4] shadow-[4px_4px_0_0_var(--nb-ink)]">
                 {profile?.image ? (
                   <img
                     src={profile.image}
@@ -99,11 +99,11 @@ export default function Dashboard() {
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-lg font-black text-[#F8FAFC]">{displayName}</p>
-                <p className="truncate text-xs font-bold text-[#94A3B8]">
+                <p className="text-lg font-black text-[var(--nb-text)]">{displayName}</p>
+                <p className="truncate text-xs font-bold text-[var(--nb-text-muted)]">
                   {profile?.email || "—"}
                 </p>
-                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
                   {[profile?.city, profile?.country].filter(Boolean).join(", ") ||
                     "Location not set"}
                 </p>
@@ -113,51 +113,53 @@ export default function Dashboard() {
 
           {/* Quiz result */}
           <section className="nb-panel">
-            <div className="flex flex-wrap items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+            <div className="nb-subpanel flex flex-wrap items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
               <h2 className="nb-title text-sm">Sustainability Score</h2>
               <Link
                 to="/quiz"
                 className="nb-btn ml-auto bg-[#FBBF24] px-3 py-1.5 text-black"
               >
                 <Sparkles className="size-3.5" strokeWidth={3} />
-                {quizScore ? "Retake Quiz" : "Take Quiz"}
+                {quizScore ? "Update My Footprint" : "Measure My Footprint"}
               </Link>
             </div>
             <div className="p-5">
               {quizScore ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {(
-                    [
-                      ["Daily Habits", quizScore.categoryPoints.dailyHabits],
-                      ["Energy Usage", quizScore.categoryPoints.usage],
-                      ["Carbon Footprint", quizScore.categoryPoints.carbonFootprint],
-                    ] as const
-                  ).map(([label, value]) => {
-                    const pct = Math.round((value / 50) * 100);
-                    return (
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <p className="text-4xl font-black leading-none tabular-nums text-[var(--nb-text)]">
+                      {(quizScore.footprintKg / 1000).toFixed(2)}
+                      <span className="ml-1 text-lg">t</span>
+                    </p>
+                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                      CO₂e per year
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-48">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                        vs Indian average
+                      </span>
+                      <span className="text-xs font-black tabular-nums text-[var(--nb-text)]">
+                        1.90 t
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-4 border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)]">
                       <div
-                        key={label}
-                        className="border-2 border-black bg-[#0B0F17] p-3"
-                      >
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
-                          {label}
-                        </p>
-                        <p className="mt-1 text-2xl font-black leading-none tabular-nums text-[#F8FAFC]">
-                          {pct}%
-                        </p>
-                        <div className="mt-2 h-2.5 border-2 border-black bg-[#1E293B]">
-                          <div
-                            className="h-full bg-[#10B981]"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                        className="h-full bg-[#10B981]"
+                        style={{
+                          width: `${Math.min(100, (quizScore.footprintKg / 4700) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+                      Measured against the 4.7 t global per-capita average.
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm font-bold text-[#94A3B8]">
-                  You have not taken the 15-question sustainability quiz yet.
+                <p className="text-sm font-bold text-[var(--nb-text-muted)]">
+                  You have not taken the carbon footprint quiz yet.
                 </p>
               )}
             </div>
@@ -183,7 +185,7 @@ export default function Dashboard() {
         {/* ------------------------------------------------ settings card */}
         <aside className="flex flex-col gap-4">
           <section className="nb-panel">
-            <div className="flex items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+            <div className="nb-subpanel flex items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
               <Settings className="size-4 text-[#10B981]" strokeWidth={3} />
               <h2 className="nb-title text-sm">Settings</h2>
             </div>
@@ -192,7 +194,7 @@ export default function Dashboard() {
               <div>
                 <label
                   htmlFor="settings-name"
-                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
                 >
                   Display Name
                 </label>
@@ -208,7 +210,7 @@ export default function Dashboard() {
               <div>
                 <label
                   htmlFor="settings-city"
-                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
                 >
                   City
                 </label>
@@ -224,7 +226,7 @@ export default function Dashboard() {
               <div>
                 <label
                   htmlFor="settings-country"
-                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
                 >
                   Country
                 </label>
@@ -240,7 +242,7 @@ export default function Dashboard() {
               <div>
                 <label
                   htmlFor="settings-image"
-                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
                 >
                   Profile Picture URL
                 </label>
@@ -253,7 +255,7 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div className="border-t-2 border-black pt-4">
+              <div className="border-t-2 border-[var(--nb-ink)] pt-4">
                 <NbSwitch
                   label="Compact Data Density"
                   checked={compact}

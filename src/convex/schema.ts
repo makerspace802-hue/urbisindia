@@ -75,12 +75,8 @@ const schema = defineSchema(
       email: v.string(),
       city: v.string(),
       country: v.string(),
-      totalPoints: v.number(),
-      categoryPoints: v.object({
-        dailyHabits: v.number(),
-        usage: v.number(),
-        carbonFootprint: v.number(),
-      }),
+      /** Estimated annual per-capita footprint in kg CO2e, summed from answers. */
+      footprintKg: v.number(),
       createdAt: v.number(),
     }).index("by_email", ["email"]),
 

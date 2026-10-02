@@ -18,8 +18,8 @@ import {
   YAxis,
 } from "recharts";
 
-const AXIS_TICK = { fill: "#94A3B8", fontSize: 10, fontWeight: 700 } as const;
-const AXIS_LINE = { stroke: "#000000", strokeWidth: 2 } as const;
+const AXIS_TICK = { fill: "#64748B", fontSize: 10, fontWeight: 700 } as const;
+const AXIS_LINE = { stroke: "#0B0F17", strokeWidth: 2 } as const;
 
 export default function ProjectionChart(input: ProjectionInput) {
   const save = useMutation(api.projections.saveProjection);
@@ -44,9 +44,9 @@ export default function ProjectionChart(input: ProjectionInput) {
 
   return (
     <section className="nb-panel">
-      <div className="flex flex-wrap items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+      <div className="nb-subpanel flex flex-wrap items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
         <h2 className="nb-title text-sm md:text-base">10-Year City Outlook</h2>
-        <span className="nb-chip bg-[#1E293B] text-[#06B6D4]">
+        <span className="nb-chip bg-[var(--nb-surface-2)] text-[#06B6D4]">
           {input.city} · {input.population.toLocaleString()} residents
         </span>
         <button
@@ -72,7 +72,7 @@ export default function ProjectionChart(input: ProjectionInput) {
               data={points}
               margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
             >
-              <CartesianGrid stroke="#334155" vertical={false} />
+              <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
               <XAxis
                 dataKey="label"
                 tick={AXIS_TICK}
@@ -95,10 +95,10 @@ export default function ProjectionChart(input: ProjectionInput) {
                 width={44}
               />
               <Tooltip
-                cursor={{ stroke: "#000000", strokeWidth: 2 }}
+                cursor={{ stroke: "#0B0F17", strokeWidth: 2 }}
                 contentStyle={{
                   background: "#0B0F17",
-                  border: "2px solid #000000",
+                  border: "2px solid #0B0F17",
                   borderRadius: 0,
                   fontWeight: 700,
                 }}
@@ -122,7 +122,7 @@ export default function ProjectionChart(input: ProjectionInput) {
                 name="Temp drop (°C)"
                 stroke="#06B6D4"
                 strokeWidth={3}
-                dot={{ r: 3, fill: "#06B6D4", stroke: "#000000", strokeWidth: 2 }}
+                dot={{ r: 3, fill: "#06B6D4", stroke: "#0B0F17", strokeWidth: 2 }}
               />
               <Line
                 yAxisId="modal"
@@ -132,14 +132,14 @@ export default function ProjectionChart(input: ProjectionInput) {
                 stroke="#10B981"
                 strokeWidth={3}
                 strokeDasharray="8 4"
-                dot={{ r: 3, fill: "#10B981", stroke: "#000000", strokeWidth: 2 }}
+                dot={{ r: 3, fill: "#10B981", stroke: "#0B0F17", strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="border-2 border-black bg-[#06B6D4] p-3 text-black shadow-[4px_4px_0_0_#000]">
+          <div className="border-2 border-[var(--nb-ink)] bg-[#06B6D4] p-3 text-black shadow-[4px_4px_0_0_var(--nb-ink)]">
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
               Microclimate by {final.year}
             </p>
@@ -147,7 +147,7 @@ export default function ProjectionChart(input: ProjectionInput) {
               -{final.tempDrop.toFixed(1)} °C
             </p>
           </div>
-          <div className="border-2 border-black bg-[#10B981] p-3 text-[#04110C] shadow-[4px_4px_0_0_#000]">
+          <div className="border-2 border-[var(--nb-ink)] bg-[#10B981] p-3 text-[#04110C] shadow-[4px_4px_0_0_var(--nb-ink)]">
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
               Commuters shifted
             </p>
@@ -155,7 +155,7 @@ export default function ProjectionChart(input: ProjectionInput) {
               +{final.modalShift.toFixed(0)}%
             </p>
           </div>
-          <div className="border-2 border-black bg-[#FBBF24] p-3 text-black shadow-[4px_4px_0_0_#000]">
+          <div className="border-2 border-[var(--nb-ink)] bg-[#FBBF24] p-3 text-black shadow-[4px_4px_0_0_var(--nb-ink)]">
             <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
               Annual city savings
             </p>

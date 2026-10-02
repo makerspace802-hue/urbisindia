@@ -1,1 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 96.81 96.81"><rect width="96.81" height="96.81" rx="18"/><g fill="#fff"><rect x="24.67" y="24.67" width="47.47" height="11.87"/><rect x="24.67" y="36.54" width="11.87" height="35.61"/><rect x="40.06" y="39.98" width="23.74" height="11.87"/><rect x="40.06" y="51.85" width="11.87" height="20.3"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="URBIS India radome">
+  <defs>
+    <clipPath id="radome-dome">
+      <path d="M48 10 C25 10 8 32 8 56 L8 68 L88 68 L88 56 C88 32 71 10 48 10 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- base plinth -->
+  <rect x="4" y="68" width="88" height="8" fill="#10B981" stroke="#000" stroke-width="4"/>
+  <rect x="4" y="78" width="88" height="12" fill="#0B0F17" stroke="#000" stroke-width="4"/>
+
+  <!-- dome shell -->
+  <path d="M48 10 C25 10 8 32 8 56 L8 68 L88 68 L88 56 C88 32 71 10 48 10 Z"
+        fill="#E8ECF2" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- geodesic meridian ribs -->
+  <g clip-path="url(#radome-dome)" stroke="#000" stroke-width="3" fill="none">
+    <path d="M48 10 L48 68"/>
+    <path d="M48 10 C36 24 30 44 30 68"/>
+    <path d="M48 10 C60 24 66 44 66 68"/>
+    <path d="M48 10 C24 26 16 46 16 68"/>
+    <path d="M48 10 C72 26 80 46 80 68"/>
+  </g>
+
+  <!-- geodesic latitude bands -->
+  <g clip-path="url(#radome-dome)" stroke="#06B6D4" stroke-width="4" fill="none">
+    <path d="M12 34 L84 34"/>
+    <path d="M9 50 L87 50"/>
+  </g>
+
+  <!-- apex beacon -->
+  <circle cx="48" cy="12" r="5" fill="#F43F5E" stroke="#000" stroke-width="3"/>
+</svg>

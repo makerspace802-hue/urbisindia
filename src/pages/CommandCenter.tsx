@@ -1,5 +1,9 @@
-import { CityMap } from "@/components/CityMap";
+import CensusCharts from "@/components/CensusCharts";
+import { api } from "@/convex/_generated/api";
+import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
+import { Megaphone } from "lucide-react";
+import { Link } from "react-router";
 
 interface Kpi {
   title: string;
@@ -72,6 +76,14 @@ const ALERTS = [
   },
 ];
 
+/** Category colours for the live community feed on the dashboard. */
+const TAG_COLORS: Record<string, string> = {
+  "Heat/Shade": "#F43F5E",
+  "Bike Lane": "#06B6D4",
+  "Transit Hub": "#FBBF24",
+  "Tree Planting": "#10B981",
+};
+
 function Sparkline({ data, color }: { data: number[]; color: string }) {
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -112,13 +124,16 @@ export default function CommandCenter() {
     year: "numeric",
   });
 
+  const allIssues = useQuery(api.admin.listIssues);
+  const recent = (allIssues ?? []).slice(0, 4);
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[var(--nb-text)] md:text-3xl">
           Dashboard
         </h1>
-        <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">{today}</span>
+        <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">{today}</span>
       </div>
 
       {/* KPI grid */}
@@ -132,7 +147,7 @@ export default function CommandCenter() {
             className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
           >
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[#94A3B8]">
+              <h2 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[var(--nb-text-muted)]">
                 {kpi.title}
               </h2>
               <span
@@ -143,18 +158,18 @@ export default function CommandCenter() {
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-4xl font-black leading-none tabular-nums text-[#F8FAFC]">
+                <p className="text-4xl font-black leading-none tabular-nums text-[var(--nb-text)]">
                   {kpi.value}
                 </p>
                 {kpi.note && (
-                  <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+                  <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
                     {kpi.note}
                   </p>
                 )}
               </div>
               <Sparkline data={kpi.spark} color={kpi.sparkColor} />
             </div>
-            <div className="mt-4 border-t-2 border-black pt-2.5">
+            <div className="mt-4 border-t-2 border-[var(--nb-ink)] pt-2.5">
               <span
                 className={`text-xs font-black tabular-nums ${kpi.changeClass}`}
               >
@@ -165,16 +180,105 @@ export default function CommandCenter() {
         ))}
       </div>
 
-      {/* Dual-mode digital twin */}
-      <div className="mt-6">
-        <CityMap />
-      </div>
+      {/* Live citizen feed — real submissions only, no placeholder rows */}
+      <section className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="nb-title text-sm md:text-base">
+            Latest From The Community
+          </h2>
+          <Link
+            to="/report"
+            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]"
+          >
+            File An Issue
+          </Link>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {recent.length === 0 ? (
+            <div className="nb-panel flex flex-col items-center gap-3 border-2 border-dashed p-8 text-center md:col-span-2">
+              <Megaphone
+                className="size-7 text-[var(--nb-text-dim)]"
+                strokeWidth={2.5}
+              />
+              <p className="text-sm font-black uppercase tracking-wide text-[var(--nb-text)]">
+                No citizen reports yet
+              </p>
+              <p className="max-w-sm text-xs font-bold leading-relaxed text-[var(--nb-text-muted)]">
+                Nothing has been filed so far. Once residents start reporting
+                issues they will appear here live.
+              </p>
+              <Link
+                to="/report"
+                className="nb-btn bg-[#10B981] text-[#04110C]"
+              >
+                File The First Report
+              </Link>
+            </div>
+          ) : (
+            recent.map((issue) => (
+              <motion.article
+                key={issue.ticket}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.25 }}
+                className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text)]">
+                    {issue.ticket}
+                  </span>
+                  <span
+                    className="nb-chip"
+                    style={{
+                      background: TAG_COLORS[issue.tag] ?? "#94A3B8",
+                      color: "#000000",
+                    }}
+                  >
+                    {issue.tag}
+                  </span>
+                  <span
+                    className="nb-chip ml-auto"
+                    style={{
+                      background:
+                        issue.status === "Resolved" ? "#10B981" : "#FBBF24",
+                      color: "#000000",
+                    }}
+                  >
+                    {issue.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
+                  {issue.description}
+                </p>
+                <p className="mt-3 border-t-2 border-[var(--nb-ink)] pt-2 text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
+                  {issue.district} · {issue.upvotes} upvotes
+                </p>
+              </motion.article>
+            ))
+          )}
+        </div>
+      </section>
+
+      {/* Census decade view, replacing the retired digital-twin map */}
+      <section className="mt-8">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="nb-title text-sm md:text-base">
+            India Between 2001 And 2011
+          </h2>
+          <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+            Census Of India
+          </span>
+        </div>
+        <CensusCharts />
+      </section>
 
       {/* Live alert ticker */}
       <section className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="nb-title text-sm md:text-base">Live Alert Ticker</h2>
-          <span className="nb-chip bg-[#1E293B] text-[#10B981]">
+          <span className="nb-chip bg-[var(--nb-surface-2)] text-[#10B981]">
             <span className="size-2 animate-pulse bg-[#10B981]" />
             2 Active
           </span>
@@ -191,11 +295,11 @@ export default function CommandCenter() {
             >
               <div className="flex items-center gap-2">
                 <span className={`nb-chip ${alert.typeClass}`}>{alert.type}</span>
-                <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[#64748B]">
+                <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
                   {alert.time}
                 </span>
               </div>
-              <p className="mt-3 text-sm font-semibold leading-relaxed text-[#CBD5E1]">
+              <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
                 {alert.text}
               </p>
             </motion.article>

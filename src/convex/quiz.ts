@@ -2,19 +2,12 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-const categoryPointsValidator = v.object({
-  dailyHabits: v.number(),
-  usage: v.number(),
-  carbonFootprint: v.number(),
-});
-
-/** Persist (or replace) the signed-in resident's latest quiz result. */
+/** Persist (or replace) the signed-in resident's latest footprint estimate. */
 export const submitQuizScore = mutation({
   args: {
     city: v.string(),
     country: v.string(),
-    totalPoints: v.number(),
-    categoryPoints: categoryPointsValidator,
+    footprintKg: v.number(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -31,8 +24,7 @@ export const submitQuizScore = mutation({
       await ctx.db.patch(existing._id, {
         city: args.city,
         country: args.country,
-        totalPoints: args.totalPoints,
-        categoryPoints: args.categoryPoints,
+        footprintKg: args.footprintKg,
         createdAt: Date.now(),
       });
       return existing._id;
@@ -42,8 +34,7 @@ export const submitQuizScore = mutation({
       email,
       city: args.city,
       country: args.country,
-      totalPoints: args.totalPoints,
-      categoryPoints: args.categoryPoints,
+      footprintKg: args.footprintKg,
       createdAt: Date.now(),
     });
   },
@@ -67,8 +58,7 @@ export const myQuizScore = query({
     return {
       city: row.city,
       country: row.country,
-      totalPoints: row.totalPoints,
-      categoryPoints: row.categoryPoints,
+      footprintKg: row.footprintKg,
       createdAt: row.createdAt,
     };
   },
@@ -82,7 +72,7 @@ export const listQuizScores = query({
     return rows.map((row) => ({
       city: row.city,
       country: row.country,
-      totalPoints: row.totalPoints,
+      footprintKg: row.footprintKg,
       createdAt: row.createdAt,
     }));
   },

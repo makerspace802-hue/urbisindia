@@ -1,7 +1,4 @@
 import { NbSlider, NbSwitch } from "@/components/NbControls";
-import ProjectionChart from "@/components/ProjectionChart";
-import { useAuth } from "@/hooks/use-auth";
-import { useCityPopulation } from "@/hooks/use-city-population";
 import { motion } from "framer-motion";
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -48,8 +45,8 @@ const SHADE_DATA = [
   { name: "Unshaded Asphalt", value: 40, color: "#F43F5E" },
 ];
 
-const AXIS_TICK = { fill: "#94A3B8", fontSize: 10, fontWeight: 700 } as const;
-const AXIS_LINE = { stroke: "#000000", strokeWidth: 2 } as const;
+const AXIS_TICK = { fill: "#64748B", fontSize: 10, fontWeight: 700 } as const;
+const AXIS_LINE = { stroke: "#0B0F17", strokeWidth: 2 } as const;
 
 /* ---------------------------------------------------------------- shared */
 
@@ -70,23 +67,22 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="border-2 border-black bg-[#0B0F17] px-3 py-2 shadow-[4px_4px_0_0_#000]">
-      {label !== undefined && (
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
-          {label}
-        </p>
+    <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2 shadow-[4px_4px_0_0_var(--nb-ink)]">
+      {label !== undefined && (<p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+            {label}
+          </p>
       )}
       {payload.map((entry, index) => (
         <p
           key={`${String(entry.name)}-${index}`}
-          className="mt-1 text-xs font-bold text-[#E2E8F0]"
+          className="mt-1 text-xs font-bold text-[var(--nb-text-2)]"
         >
           <span
-            className="mr-1.5 inline-block size-2.5 border border-black align-[-1px]"
+            className="mr-1.5 inline-block size-2.5 border border-[var(--nb-ink)] align-[-1px]"
             style={{ background: entry.color }}
           />
           {entry.name}:{" "}
-          <span className="font-black tabular-nums text-[#F8FAFC]">
+          <span className="font-black tabular-nums text-[var(--nb-text)]">
             {entry.value}
           </span>
         </p>
@@ -97,8 +93,8 @@ function ChartTooltip({
 
 function LegendSwatch({ color, label }: { color: string; label: string }) {
   return (
-    <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-[#CBD5E1]">
-      <span className="size-3 border-2 border-black" style={{ background: color }} />
+    <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-2)]">
+      <span className="size-3 border-2 border-[var(--nb-ink)]" style={{ background: color }} />
       {label}
     </span>
   );
@@ -117,7 +113,7 @@ function ChartPanel({
 }) {
   return (
     <section className={`nb-panel min-w-0 ${className}`}>
-      <div className="border-b-2 border-black bg-[#111827] p-4">
+      <div className="nb-subpanel border-b-2 border-[var(--nb-ink)] p-4">
         <h2 className="nb-title text-xs leading-snug md:text-sm">{title}</h2>
         {legend && <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">{legend}</div>}
       </div>
@@ -129,10 +125,6 @@ function ChartPanel({
 /* ------------------------------------------------------------------ page */
 
 export default function Analytics() {
-  const { user } = useAuth();
-  const city = user?.city?.trim() || "Mumbai";
-  const { population, estimated } = useCityPopulation(city);
-
   const [canopy, setCanopy] = useState(12);
   const [toll, setToll] = useState(4);
   const [misting, setMisting] = useState(true);
@@ -151,10 +143,10 @@ export default function Analytics() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[var(--nb-text)] md:text-3xl">
           Urban Analytics
         </h1>
-        <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">
+        <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
           Scenario Engine · Q3 2026
         </span>
       </div>
@@ -174,7 +166,7 @@ export default function Analytics() {
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={DISTRICT_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                <CartesianGrid stroke="#334155" vertical={false} />
+                <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
                 <XAxis
                   dataKey="district"
                   tick={AXIS_TICK}
@@ -203,7 +195,7 @@ export default function Analytics() {
                   width={30}
                 />
                 <Tooltip
-                  cursor={{ stroke: "#000000", strokeWidth: 2 }}
+                  cursor={{ stroke: "#0B0F17", strokeWidth: 2 }}
                   content={(props) => <ChartTooltip {...props} />}
                 />
                 <Line
@@ -246,7 +238,7 @@ export default function Analytics() {
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={MODAL_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                <CartesianGrid stroke="#334155" vertical={false} />
+                <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
                 <XAxis
                   dataKey="hour"
                   tick={AXIS_TICK}
@@ -256,34 +248,31 @@ export default function Analytics() {
                 />
                 <YAxis tick={AXIS_TICK} tickLine={false} axisLine={AXIS_LINE} width={44} />
                 <Tooltip
-                  cursor={{ fill: "#0B0F17", fillOpacity: 0.5 }}
+                  cursor={{ fill: "rgba(11,15,23,0.5)" }}
                   content={(props) => <ChartTooltip {...props} />}
                 />
                 <Bar
                   dataKey="bus"
                   name="Public Bus"
                   stackId="split"
-                  fill="#06B6D4"
-                  stroke="#000000"
-                  strokeWidth={1.5}
+                  fill="#06B6D4"stroke="var(--nb-ink)"
+                    strokeWidth={1.5}
                   maxBarSize={52}
                 />
                 <Bar
                   dataKey="micro"
                   name="Micro-Mobility / Bikes"
                   stackId="split"
-                  fill="#10B981"
-                  stroke="#000000"
-                  strokeWidth={1.5}
+                  fill="#10B981"stroke="var(--nb-ink)"
+                    strokeWidth={1.5}
                   maxBarSize={52}
                 />
                 <Bar
                   dataKey="ice"
                   name="Private ICE Vehicles"
                   stackId="split"
-                  fill="#F43F5E"
-                  stroke="#000000"
-                  strokeWidth={1.5}
+                  fill="#F43F5E"stroke="var(--nb-ink)"
+                    strokeWidth={1.5}
                   maxBarSize={52}
                 />
               </BarChart>
@@ -304,7 +293,7 @@ export default function Analytics() {
                     innerRadius="58%"
                     outerRadius="86%"
                     paddingAngle={2}
-                    stroke="#000000"
+                    stroke="var(--nb-ink)"
                     strokeWidth={2}
                     isAnimationActive
                   >
@@ -316,10 +305,10 @@ export default function Analytics() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-black leading-none text-[#F8FAFC]">
+                <span className="text-2xl font-black leading-none text-[var(--nb-text)]">
                   100%
                 </span>
-                <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#94A3B8]">
+                <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
                   Surface Split
                 </span>
               </div>
@@ -330,17 +319,17 @@ export default function Analytics() {
                   key={entry.name}
                   className={[
                     "flex items-center gap-2",
-                    index > 0 ? "border-t-2 border-black pt-2" : "",
+                    index > 0 ? "border-t-2 border-[var(--nb-ink)] pt-2" : "",
                   ].join(" ")}
                 >
                   <span
-                    className="size-3.5 shrink-0 border-2 border-black"
+                    className="size-3.5 shrink-0 border-2 border-[var(--nb-ink)]"
                     style={{ background: entry.color }}
                   />
-                  <span className="text-xs font-bold text-[#CBD5E1]">
+                  <span className="text-xs font-bold text-[var(--nb-text-2)]">
                     {entry.name}
                   </span>
-                  <span className="ml-auto text-xs font-black tabular-nums text-[#F8FAFC]">
+                  <span className="ml-auto text-xs font-black tabular-nums text-[var(--nb-text)]">
                     {entry.value}%
                   </span>
                 </div>
@@ -358,11 +347,11 @@ export default function Analytics() {
         transition={{ duration: 0.3 }}
         className="nb-panel"
       >
-        <div className="flex flex-wrap items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+        <div className="nb-subpanel flex flex-wrap items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
           <h2 className="nb-title text-sm md:text-base">
             🎛️ Dynamic Climate &amp; Mobility Simulator
           </h2>
-          <span className="nb-chip ml-auto bg-[#1E293B] text-[#FBBF24]">
+          <span className="nb-chip ml-auto bg-[var(--nb-surface-2)] text-[#FBBF24]">
             <span className="size-2 animate-pulse bg-[#FBBF24]" />
             Live Model
           </span>
@@ -381,7 +370,7 @@ export default function Analytics() {
                 displayValue={`+${canopy}%`}
                 onChange={setCanopy}
               />
-              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[#64748B]">
+              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
                 Range +0% to +35%
               </p>
             </div>
@@ -396,12 +385,12 @@ export default function Analytics() {
                 displayValue={`$${toll}`}
                 onChange={setToll}
               />
-              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[#64748B]">
+              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
                 Range $0 to $15
               </p>
             </div>
 
-            <div className="border-t-2 border-black pt-5">
+            <div className="border-t-2 border-[var(--nb-ink)] pt-5">
               <NbSwitch
                 label="Automated Emergency Heat Misting System"
                 checked={misting}
@@ -412,7 +401,7 @@ export default function Analytics() {
 
           {/* Live readouts */}
           <div className="flex flex-col justify-center gap-4">
-            <div className="border-2 border-black bg-[#06B6D4] p-4 shadow-[5px_5px_0_0_#000]">
+            <div className="border-2 border-[var(--nb-ink)] bg-[#06B6D4] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#03151A]">
                 Estimated Microclimate Temp Drop
               </p>
@@ -420,7 +409,7 @@ export default function Analytics() {
                 {readouts.tempDrop}
               </p>
             </div>
-            <div className="border-2 border-black bg-[#10B981] p-4 shadow-[5px_5px_0_0_#000]">
+            <div className="border-2 border-[var(--nb-ink)] bg-[#10B981] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#04110C]">
                 Commuter Modal Shift to Micro-Mobility
               </p>
@@ -428,7 +417,7 @@ export default function Analytics() {
                 {readouts.modalShift}
               </p>
             </div>
-            <div className="border-2 border-black bg-[#FBBF24] p-4 shadow-[5px_5px_0_0_#000]">
+            <div className="border-2 border-[var(--nb-ink)] bg-[#FBBF24] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
               <p className="text-[10px] font-black uppercase tracking-widest text-black/70">
                 Annual Municipal Health &amp; Energy Savings
               </p>
@@ -439,21 +428,6 @@ export default function Analytics() {
           </div>
         </div>
       </motion.section>
-
-      {/* 10-year projection derived from the simulator controls above */}
-      <ProjectionChart
-        canopy={canopy}
-        toll={toll}
-        misting={misting}
-        population={population}
-        city={city}
-      />
-
-      {estimated && population > 0 && (
-        <p className="text-center text-[10px] font-black uppercase tracking-widest text-[#64748B]">
-          Population for {city} is an offline estimate
-        </p>
-      )}
     </div>
   );
 }

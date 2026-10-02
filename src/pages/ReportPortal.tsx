@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { Check, ChevronUp, ImagePlus, Send, ShieldCheck, Wrench, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 /* --------------------------------------------------------------- config */
 
@@ -116,19 +116,29 @@ export default function ReportPortal() {
 
   const reports: CitizenReport[] = liveIssues ?? [];
 
-  // Revoke object URLs when the preview changes or the page unmounts.
+  // Revoke the previous object URL explicitly when a new file is picked, and
+  // only clean up the live one on real unmount. Revoking inside an effect keyed
+  // on `previewUrl` breaks the preview: StrictMode double-mounts, so the cleanup
+  // runs while the <img> is still pointing at that URL and the image goes blank.
+  const previewUrlRef = useRef<string | null>(null);
+
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     };
-  }, [previewUrl]);
+  }, []);
 
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    const next =
+      file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+    previewUrlRef.current = next;
     setFileName(file.name);
-    setPreviewUrl(
-      file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    );
+    setPreviewUrl(next);
   };
 
   const clearForm = () => {
@@ -198,7 +208,7 @@ export default function ReportPortal() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[var(--nb-text)] md:text-3xl">
           Citizen Engagement &amp; Grievance Portal
         </h1>
         <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +218,7 @@ export default function ReportPortal() {
               Admin Mode
             </span>
           )}
-          <span className="nb-chip bg-[#1E293B] text-[#06B6D4]">
+          <span className="nb-chip bg-[var(--nb-surface-2)] text-[#06B6D4]">
             {reports.length} Tickets Live
           </span>
         </div>
@@ -225,7 +235,7 @@ export default function ReportPortal() {
           <span className="nb-chip bg-[#10B981] text-[#04110C]">
             Report Received
           </span>
-          <span className="text-lg font-black tabular-nums text-[#F8FAFC]">
+          <span className="text-lg font-black tabular-nums text-[var(--nb-text)]">
             Ticket {success.ticket}
           </span>
           <span className="nb-chip whitespace-normal bg-[#FBBF24] text-black">
@@ -235,7 +245,7 @@ export default function ReportPortal() {
             type="button"
             aria-label="Dismiss"
             onClick={() => setSuccess(null)}
-            className="ml-auto flex size-7 shrink-0 items-center justify-center border-2 border-black bg-[#1E293B] text-[#E2E8F0] transition-transform hover:scale-105"
+            className="ml-auto flex size-7 shrink-0 items-center justify-center border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] transition-transform hover:scale-105"
           >
             <X className="size-4" strokeWidth={3} />
           </button>
@@ -245,9 +255,9 @@ export default function ReportPortal() {
       <div className="mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
         {/* ------------------------------------------------------ form */}
         <form onSubmit={handleSubmit} className="nb-panel">
-          <div className="flex items-center justify-between gap-3 border-b-2 border-black bg-[#111827] p-4">
+          <div className="nb-subpanel flex items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
             <h2 className="nb-title text-sm">Report an Issue</h2>
-            <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">
+            <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
               Public Form
             </span>
           </div>
@@ -257,7 +267,7 @@ export default function ReportPortal() {
             <div>
               <label
                 htmlFor="report-category"
-                className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
               >
                 Report Category
               </label>
@@ -281,7 +291,7 @@ export default function ReportPortal() {
             <div>
               <label
                 htmlFor="report-district"
-                className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
               >
                 Location / District
               </label>
@@ -305,7 +315,7 @@ export default function ReportPortal() {
             <div>
               <label
                 htmlFor="report-description"
-                className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
               >
                 Issue Description
               </label>
@@ -322,7 +332,7 @@ export default function ReportPortal() {
 
             {/* Urgency */}
             <div>
-              <span className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]">
                 Urgency Level
               </span>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Urgency Level">
@@ -337,7 +347,7 @@ export default function ReportPortal() {
                       "nb-chip px-4 py-2 transition-colors",
                       urgency === level
                         ? URGENCY_ACTIVE[level]
-                        : "bg-[#0B0F17] text-[#94A3B8] hover:bg-[#334155] hover:text-[#E2E8F0]",
+                        : "bg-[var(--nb-field-bg)] text-[var(--nb-text-muted)] hover:bg-[var(--nb-surface-hover)] hover:text-[var(--nb-text-2)]",
                     ].join(" ")}
                   >
                     {level}
@@ -348,7 +358,7 @@ export default function ReportPortal() {
 
             {/* Image dropzone */}
             <div>
-              <span className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]">
                 Image Evidence
               </span>
               <label
@@ -366,20 +376,24 @@ export default function ReportPortal() {
                   "flex cursor-pointer flex-col items-center justify-center gap-2 border-2 border-dashed p-5 text-center transition-colors",
                   dragging
                     ? "border-[#10B981] bg-[#10B981]/10"
-                    : "border-black bg-[#111827] hover:bg-[#334155]",
+                    : "border-[var(--nb-ink)] bg-[var(--nb-surface-2)] hover:bg-[var(--nb-surface-hover)]",
                 ].join(" ")}
               >
                 <input
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(event) => acceptFile(event.target.files?.[0])}
+                  onChange={(event) => {
+                    acceptFile(event.target.files?.[0]);
+                    // Allow re-picking the same file after a clear.
+                    event.target.value = "";
+                  }}
                 />
                 {previewUrl ? (
                   <img
                     src={previewUrl}
-                    alt="Upload preview"
-                    className="h-28 w-full border-2 border-black object-cover"
+                    alt={fileName ? `Preview of ${fileName}` : "Upload preview"}
+                    className="max-h-40 w-full border-2 border-[var(--nb-ink)] bg-[var(--nb-bg)] object-contain"
                   />
                 ) : fileName ? (
                   <span className="nb-chip max-w-full bg-[#F8FAFC] text-black">
@@ -387,12 +401,15 @@ export default function ReportPortal() {
                   </span>
                 ) : (
                   <>
-                    <ImagePlus className="size-6 text-[#94A3B8]" strokeWidth={2.5} />
-                    <span className="text-xs font-black uppercase tracking-wide text-[#94A3B8]">
+                    <ImagePlus
+                      className="size-6 text-[var(--nb-text-muted)]"
+                      strokeWidth={2.5}
+                    />
+                    <span className="text-xs font-black uppercase tracking-wide text-[var(--nb-text-2)]">
                       Drop image or click to upload
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
-                      JPG / PNG · preview simulated
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
+                      JPG / PNG · shown as a live preview
                     </span>
                   </>
                 )}
@@ -402,7 +419,7 @@ export default function ReportPortal() {
             <button
               type="submit"
               disabled={submitting}
-              className="nb-btn mt-1 w-full bg-[#10B981] py-3 text-[#04110C] disabled:cursor-not-allowed disabled:bg-[#1E293B] disabled:text-[#64748B]"
+              className="nb-btn mt-1 w-full bg-[#10B981] py-3 text-[#04110C] disabled:cursor-not-allowed disabled:bg-[var(--nb-surface-2)] disabled:text-[var(--nb-text-dim)]"
             >
               <Send className="size-4" strokeWidth={3} />
               {submitting
@@ -416,11 +433,11 @@ export default function ReportPortal() {
 
         {/* ------------------------------------------------------ feed */}
         <section className="nb-panel">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-black bg-[#111827] p-4">
+          <div className="nb-subpanel flex flex-wrap items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
             <h2 className="nb-title text-xs leading-snug md:text-sm">
               Community Public Live Feed &amp; Status Tracker
             </h2>
-            <span className="nb-chip bg-[#1E293B] text-[#06B6D4]">
+            <span className="nb-chip bg-[var(--nb-surface-2)] text-[#06B6D4]">
               <span className="size-2 animate-pulse bg-[#06B6D4]" />
               Live
             </span>
@@ -428,7 +445,7 @@ export default function ReportPortal() {
 
           <div className="flex flex-col gap-3 p-4">
             {reports.length === 0 && (
-              <p className="border-2 border-dashed border-black bg-[#111827] p-6 text-center text-xs font-bold uppercase tracking-wide text-[#64748B]">
+              <p className="border-2 border-dashed border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-6 text-center text-xs font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
                 No tickets filed yet. Be the first to report an issue.
               </p>
             )}
@@ -460,17 +477,17 @@ export default function ReportPortal() {
                   >
                     {report.tag}
                   </span>
-                  <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[#64748B]">
+                  <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
                     {timeAgo(report.createdAt)}
                   </span>
                 </div>
 
-                <p className="mt-3 text-sm font-semibold leading-relaxed text-[#E2E8F0]">
+                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
                   {report.description}
                 </p>
 
                 {report.resolution && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-2 border-black bg-[#10B981] p-2.5">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-2 border-[var(--nb-ink)] bg-[#10B981] p-2.5">
                     <Check className="size-4 shrink-0 text-[#04110C]" strokeWidth={4} />
                     <span className="text-xs font-bold leading-relaxed text-[#04110C]">
                       {report.resolution}
@@ -478,11 +495,11 @@ export default function ReportPortal() {
                   </div>
                 )}
 
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t-2 border-black pt-3">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t-2 border-[var(--nb-ink)] pt-3">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-muted)]">
                     {report.district}
                   </span>
-                  <span className="border-2 border-black bg-[#111827] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#CBD5E1]">
+                  <span className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-2)]">
                     {report.urgency} Priority
                   </span>
                   <button
@@ -493,7 +510,7 @@ export default function ReportPortal() {
                       "nb-btn px-3 py-1.5 text-xs tabular-nums",
                       upvotedIds.has(report.ticket)
                         ? "bg-[#10B981] text-[#04110C]"
-                        : "ml-auto bg-[#1E293B] text-[#E2E8F0]",
+                        : "ml-auto bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]",
                     ].join(" ")}
                   >
                     <ChevronUp className="size-4" strokeWidth={3} />
@@ -502,7 +519,7 @@ export default function ReportPortal() {
                 </div>
 
                 {isAdmin && report.status !== "Resolved" && (
-                  <div className="mt-3 border-t-2 border-black pt-3">
+                  <div className="mt-3 border-t-2 border-[var(--nb-ink)] pt-3">
                     {resolvingTicket === report.ticket ? (
                       <div className="flex flex-col gap-2">
                         <input
@@ -527,7 +544,7 @@ export default function ReportPortal() {
                               setResolvingTicket(null);
                               setResolutionNote("");
                             }}
-                            className="nb-btn justify-center bg-[#1E293B] px-3 py-2 text-[#CBD5E1]"
+                            className="nb-btn justify-center bg-[var(--nb-surface-2)] px-3 py-2 text-[var(--nb-text-2)]"
                           >
                             Cancel
                           </button>

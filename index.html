@@ -1,14 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="apple-touch-icon" href="/logo.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>URBIS Management System</title>
-</head>
+  <meta name="theme-color" content="#0B0F17" />
+  <meta
+    name="description"
+    content="URBIS India — smart city management platform with predictive urban analytics, citizen reporting and Census decade tracking."
+  />
+  <title>URBIS India — Smart City Management</title>
 
+  <script>
+    // Apply the stored theme before first paint so the page never flashes
+    // light when dark is selected (or vice versa).
+    (function () {
+      try {
+        var stored = window.localStorage.getItem("urbis.theme");
+        var theme = stored === "light" || stored === "dark" ? stored : "dark";
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.style.colorScheme = theme;
+      } catch (error) {
+        // Storage blocked; the React provider will still set the class.
+      }
+    })();
+  </script>
+</head>
 
 <body>
   <div id="root"></div>

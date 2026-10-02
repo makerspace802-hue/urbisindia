@@ -1,464 +1,506 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import { motion } from "framer-motion";
-import { Check, RotateCcw, Sparkles, Users } from "lucide-react";
-import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, RotateCcw, Save, TrendingDown, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 /* --------------------------------------------------------------- questions */
 
-type Category = "dailyHabits" | "usage" | "carbonFootprint";
-
 interface Question {
   id: string;
-  category: Category;
   prompt: string;
-  options: { label: string; points: number }[];
+  /** Each option carries its share of an annual per-capita footprint, kg CO2e. */
+  options: { label: string; kg: number }[];
 }
 
 const QUESTIONS: Question[] = [
-  // --- Daily habits (5) ---
   {
-    id: "h1",
-    category: "dailyHabits",
-    prompt: "How do you usually get to work or campus?",
+    id: "commute",
+    prompt: "How do you usually get to work, college or school?",
     options: [
-      { label: "Walk or cycle", points: 10 },
-      { label: "Bus, metro or train", points: 8 },
-      { label: "Ride-share or carpool", points: 5 },
-      { label: "Drive alone", points: 1 },
+      { label: "Walk or cycle", kg: 40 },
+      { label: "Bus, metro or train", kg: 110 },
+      { label: "Ride-share or carpool", kg: 210 },
+      { label: "Drive alone", kg: 380 },
     ],
   },
   {
-    id: "h2",
-    category: "dailyHabits",
-    prompt: "How many single-use items did you use yesterday?",
+    id: "commute-length",
+    prompt: "How long is your one-way commute most days?",
     options: [
-      { label: "None", points: 10 },
-      { label: "One or two", points: 7 },
-      { label: "Three to five", points: 4 },
-      { label: "More than five", points: 1 },
+      { label: "Under 10 minutes", kg: 30 },
+      { label: "10 to 25 minutes", kg: 90 },
+      { label: "25 to 45 minutes", kg: 170 },
+      { label: "Over 45 minutes", kg: 280 },
     ],
   },
   {
-    id: "h3",
-    category: "dailyHabits",
-    prompt: "How long is your typical outdoor commute?",
+    id: "flights",
+    prompt: "How many flights have you taken in the last twelve months?",
     options: [
-      { label: "Under 10 minutes", points: 10 },
-      { label: "10 to 25 minutes", points: 7 },
-      { label: "25 to 45 minutes", points: 4 },
-      { label: "Over 45 minutes", points: 1 },
+      { label: "None", kg: 0 },
+      { label: "One or two", kg: 300 },
+      { label: "Three to five", kg: 750 },
+      { label: "More than five", kg: 1400 },
     ],
   },
   {
-    id: "h4",
-    category: "dailyHabits",
-    prompt: "How often do you shop locally rather than online?",
+    id: "diet",
+    prompt: "In a typical week, how many meals are fully plant-based?",
     options: [
-      { label: "Most days", points: 10 },
-      { label: "About once a week", points: 7 },
-      { label: "Rarely", points: 4 },
-      { label: "Almost never", points: 1 },
+      { label: "All or nearly all", kg: 240 },
+      { label: "About half", kg: 420 },
+      { label: "A few", kg: 640 },
+      { label: "Rarely or never", kg: 900 },
     ],
   },
   {
-    id: "h5",
-    category: "dailyHabits",
-    prompt: "How much of your food is plant-based in a typical week?",
+    id: "food-waste",
+    prompt: "How much food do you throw away in a typical month?",
     options: [
-      { label: "Almost entirely", points: 10 },
-      { label: "Mostly plant-based", points: 7 },
-      { label: "A balanced mix", points: 4 },
-      { label: "Mostly meat or dairy", points: 1 },
-    ],
-  },
-
-  // --- Energy usage (5) ---
-  {
-    id: "u1",
-    category: "usage",
-    prompt: "What is your home's main heat or cooling source?",
-    options: [
-      { label: "Heat pump or efficient system", points: 10 },
-      { label: "Modern gas furnace", points: 7 },
-      { label: "Older central unit", points: 4 },
-      { label: "Electric resistance heating", points: 1 },
+      { label: "Almost nothing", kg: 20 },
+      { label: "A small amount", kg: 70 },
+      { label: "A fair bit", kg: 150 },
+      { label: "A lot of it", kg: 260 },
     ],
   },
   {
-    id: "u2",
-    category: "usage",
-    prompt: "How many LED bulbs are in your home?",
+    id: "home-power",
+    prompt: "What heats or cools your home?",
     options: [
-      { label: "All of them", points: 10 },
-      { label: "Most of them", points: 7 },
-      { label: "Only a few", points: 4 },
-      { label: "None yet", points: 1 },
+      { label: "Solar, or a heat pump", kg: 90 },
+      { label: "Efficient modern unit", kg: 220 },
+      { label: "An older central system", kg: 480 },
+      { label: "Diesel, coal or a chulha", kg: 1150 },
     ],
   },
   {
-    id: "u3",
-    category: "usage",
-    prompt: "Do you line-dry clothes instead of using a dryer?",
+    id: "bulbs",
+    prompt: "What share of your lights are LEDs?",
     options: [
-      { label: "Yes, every week", points: 10 },
-      { label: "Sometimes", points: 7 },
-      { label: "Rarely", points: 4 },
-      { label: "Never", points: 1 },
+      { label: "All of them", kg: 10 },
+      { label: "Most of them", kg: 45 },
+      { label: "Only a few", kg: 95 },
+      { label: "None yet", kg: 150 },
     ],
   },
   {
-    id: "u4",
-    category: "usage",
-    prompt: "How often do you charge a battery or electric device overnight?",
+    id: "laundry",
+    prompt: "How often do you use a clothes dryer?",
     options: [
-      { label: "Never, I avoid it", points: 10 },
-      { label: "A few nights a week", points: 7 },
-      { label: "Most nights", points: 4 },
-      { label: "Every single night", points: 1 },
+      { label: "Never, I line-dry", kg: 10 },
+      { label: "Once a month", kg: 40 },
+      { label: "Once a week", kg: 110 },
+      { label: "Several times a week", kg: 200 },
     ],
   },
   {
-    id: "u5",
-    category: "usage",
-    prompt: "How much of your electricity comes from rooftop solar?",
+    id: "devices",
+    prompt: "How many devices do you charge overnight on a typical night?",
     options: [
-      { label: "All of it", points: 10 },
-      { label: "More than half", points: 7 },
-      { label: "A small share", points: 4 },
-      { label: "None", points: 1 },
-    ],
-  },
-
-  // --- Carbon footprint (5) ---
-  {
-    id: "c1",
-    category: "carbonFootprint",
-    prompt: "How many flights have you taken in the last year?",
-    options: [
-      { label: "None", points: 10 },
-      { label: "One or two", points: 7 },
-      { label: "Three to five", points: 4 },
-      { label: "More than five", points: 1 },
+      { label: "None", kg: 5 },
+      { label: "One", kg: 15 },
+      { label: "Two or three", kg: 35 },
+      { label: "Four or more", kg: 70 },
     ],
   },
   {
-    id: "c2",
-    category: "carbonFootprint",
-    prompt: "How often do you eat a plant-based meal?",
+    id: "vehicle",
+    prompt: "Do you own a petrol or diesel vehicle?",
     options: [
-      { label: "Every meal", points: 10 },
-      { label: "Most days", points: 7 },
-      { label: "Once a week", points: 4 },
-      { label: "Rarely", points: 1 },
+      { label: "No vehicle at all", kg: 0 },
+      { label: "An EV or electric two-wheeler", kg: 70 },
+      { label: "Yes, but I drive little", kg: 400 },
+      { label: "Yes, I drive it daily", kg: 850 },
     ],
   },
   {
-    id: "c3",
-    category: "carbonFootprint",
-    prompt: "What is your main grocery habit?",
+    id: "fuel",
+    prompt: "How is your household cooking fuel supplied?",
     options: [
-      { label: "Local and seasonal", points: 10 },
-      { label: "Mostly plant-based", points: 8 },
-      { label: "Mixed shopping", points: 4 },
-      { label: "Packaged and processed", points: 1 },
+      { label: "Piped gas or induction", kg: 70 },
+      { label: "LPG cylinder", kg: 110 },
+      { label: "Mixed, or kerosene", kg: 260 },
+      { label: "Firewood, coal or dung cake", kg: 620 },
     ],
   },
   {
-    id: "c4",
-    category: "carbonFootprint",
-    prompt: "How much of your waste do you recycle or compost?",
+    id: "waste",
+    prompt: "How much of your waste is recycled or composted?",
     options: [
-      { label: "Nearly everything", points: 10 },
-      { label: "Most of it", points: 7 },
-      { label: "A small share", points: 4 },
-      { label: "None", points: 1 },
+      { label: "Nearly all of it", kg: 10 },
+      { label: "Most of it", kg: 60 },
+      { label: "A small share", kg: 140 },
+      { label: "None at all", kg: 210 },
     ],
   },
   {
-    id: "c5",
-    category: "carbonFootprint",
-    prompt: "How many new clothes did you buy in the last three months?",
+    id: "clothing",
+    prompt: "How many new clothing items did you buy in the last three months?",
     options: [
-      { label: "None", points: 10 },
-      { label: "One or two", points: 7 },
-      { label: "Three to five", points: 4 },
-      { label: "More than five", points: 1 },
+      { label: "None", kg: 20 },
+      { label: "One or two", kg: 90 },
+      { label: "Three to five", kg: 200 },
+      { label: "More than five", kg: 380 },
+    ],
+  },
+  {
+    id: "water",
+    prompt: "How long is your shower on average?",
+    options: [
+      { label: "Under 5 minutes", kg: 20 },
+      { label: "About 10 minutes", kg: 70 },
+      { label: "About 20 minutes", kg: 160 },
+      { label: "Over 20 minutes", kg: 280 },
+    ],
+  },
+  {
+    id: "plastic",
+    prompt: "How often do you use single-use plastic?",
+    options: [
+      { label: "I avoid it entirely", kg: 15 },
+      { label: "A few times a week", kg: 60 },
+      { label: "Most days", kg: 130 },
+      { label: "Several times a day", kg: 240 },
     ],
   },
 ];
 
-const MAX_PER_CATEGORY = 50;
+/** Reference point: India's per-capita territorial CO2 emissions, kg CO2e/yr. */
+const INDIA_AVERAGE_KG = 1900;
+const WORLD_AVERAGE_KG = 4700;
 
-const CATEGORY_META: Record<
-  Category,
-  { label: string; color: string; shadow: string }
-> = {
-  dailyHabits: { label: "Daily Habits", color: "#06B6D4", shadow: "text-[#03151A]" },
-  usage: { label: "Energy Usage", color: "#10B981", shadow: "text-[#04110C]" },
-  carbonFootprint: { label: "Carbon Footprint", color: "#FBBF24", shadow: "text-black" },
-};
-
-const CATEGORY_ORDER: Category[] = [
-  "dailyHabits",
-  "usage",
-  "carbonFootprint",
-];
-
-function grade(scorePct: number) {
-  if (scorePct >= 85)
-    return { label: "Trailblazer", color: "#10B981", note: "Top decile. The city is pulling toward you." };
-  if (scorePct >= 65)
-    return { label: "Green Commuter", color: "#06B6D4", note: "Strong habits with a few easy wins left." };
-  if (scorePct >= 40)
-    return { label: "On The Curb", color: "#FBBF24", note: "Solid baseline. A couple of swaps would compound." };
-  return { label: "High Impact", color: "#F43F5E", note: "Biggest headroom on this block of the city." };
+function bandFor(kg: number) {
+  if (kg < 700)
+    return {
+      label: "Low Impact",
+      color: "#10B981",
+      note: "Well under the Indian per-capita average. Unusually low and worth keeping up.",
+    };
+  if (kg < 1500)
+    return {
+      label: "Below Average",
+      color: "#06B6D4",
+      note: "Comfortably under the national per-capita figure of about 1.9 tonnes.",
+    };
+  if (kg < 2500)
+    return {
+      label: "Around Average",
+      color: "#FBBF24",
+      note: "Broadly in line with how India averages today. Transport is usually the lever.",
+    };
+  if (kg < 4000)
+    return {
+      label: "Above Average",
+      color: "#F8FAFC",
+      note: "Higher than most Indian households. Cooking fuel and flights are the big movers.",
+    };
+  return {
+    label: "High Impact",
+    color: "#F43F5E",
+    note: "Well above both the Indian and global averages. Start with commute and cooking fuel.",
+  };
 }
 
 /* ------------------------------------------------------------------ page */
 
-export default function Quiz({ population = 0 }: { population?: number }) {
+export default function Quiz({
+  population = 0,
+  onComplete,
+}: {
+  population?: number;
+  /** Fired once every question is answered, so the page can reveal what follows. */
+  onComplete?: (footprintKg: number) => void;
+}) {
   const { isAuthenticated, user } = useAuth();
   const saved = useQuery(api.quiz.myQuizScore);
   const submit = useMutation(api.quiz.submitQuizScore);
 
+  const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [locked, setLocked] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const answered = Object.keys(answers).length;
-  const complete = answered === QUESTIONS.length;
+  const question = QUESTIONS[index];
+  const answeredCount = Object.keys(answers).length;
+  const complete = answeredCount === QUESTIONS.length;
 
-  const results = useMemo(() => {
-    const perCategory: Record<Category, number> = {
-      dailyHabits: 0,
-      usage: 0,
-      carbonFootprint: 0,
-    };
-    for (const question of QUESTIONS) {
-      const points = answers[question.id];
-      if (points !== undefined) perCategory[question.category] += points;
-    }
-    const total =
-      perCategory.dailyHabits +
-      perCategory.usage +
-      perCategory.carbonFootprint;
-    const max = MAX_PER_CATEGORY * 3;
-    return { perCategory, total, max, pct: Math.round((total / max) * 100) };
-  }, [answers]);
+  const footprintKg = useMemo(
+    () => QUESTIONS.reduce((total, item) => total + (answers[item.id] ?? 0), 0),
+    [answers],
+  );
+
+  const band = bandFor(footprintKg);
+
+  useEffect(() => {
+    if (complete) onComplete?.(footprintKg);
+  }, [complete, footprintKg, onComplete]);
 
   const cityScale = useMemo(() => {
-    if (!population) return null;
-    // Scale the individual's score into a city-wide figure so a single
-    // result reads as a share of the whole urban programme.
-    const cityPct = results.pct;
+    if (!population || !complete) return null;
     return {
-      kgAvoided: Math.round((population * cityPct) / 100 / 1000) * 1000,
-      commuters: Math.round((population * cityPct) / 100 / 10000) * 100,
-      households: Math.round((population * cityPct) / 100 / 100000) * 100,
+      tonnes: (population * footprintKg) / 1000,
+      savingsTonnes: (population * (INDIA_AVERAGE_KG - footprintKg)) / 1000,
     };
-  }, [population, results.pct]);
+  }, [population, complete, footprintKg]);
 
-  const handleReset = () => {
+  const handlePick = (optionKg: number) => {
+    if (locked) return;
+    setLocked(true);
+    setAnswers((prev) => ({ ...prev, [question.id]: optionKg }));
+
+    // Let the check mark land, then slide the next question in.
+    window.setTimeout(() => {
+      setLocked(false);
+      setDirection(1);
+      setIndex((i) => Math.min(i + 1, QUESTIONS.length - 1));
+    }, 240);
+  };
+
+  const handleRestart = () => {
     setAnswers({});
+    setIndex(0);
+    setDirection(-1);
     setSavedAt(null);
   };
 
   const handleSave = async () => {
     if (!complete || !isAuthenticated) return;
-    const city = saved?.city ?? "Unknown";
-    const id = await submit({
-      city,
-      country: "—",
-      totalPoints: results.total,
-      categoryPoints: results.perCategory,
+    await submit({
+      city: saved?.city || user?.city || "Unknown",
+      country: saved?.country || user?.country || "—",
+      footprintKg,
     });
     setSavedAt(Date.now());
-    void id;
+  };
+
+  const slide = {
+    enter: (dir: number) => ({ x: dir > 0 ? 110 : -110, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? -110 : 110, opacity: 0 }),
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
+    <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
-          Resident Sustainability Quiz
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[var(--nb-text)] md:text-3xl">
+          Your Carbon Footprint
         </h1>
-        <span className="nb-chip bg-[#1E293B] text-[#10B981]">
-          {answered} / {QUESTIONS.length} Answered
+        <span className="nb-chip bg-[var(--nb-surface-2)] text-[#10B981]">
+          {answeredCount} / {QUESTIONS.length}
         </span>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* ------------------------------------------------- questions */}
-        <div className="flex flex-col gap-4">
-          {QUESTIONS.map((question, index) => {
-            const meta = CATEGORY_META[question.category];
-            const chosen = answers[question.id];
-            return (
-              <motion.article
-                key={question.id}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-40px" }}
-                transition={{ duration: 0.22, delay: (index % 3) * 0.05 }}
-                className="nb-panel"
-              >
-                <div className="flex items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
-                  <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">
-                    Q{index + 1}
-                  </span>
-                  <span
-                    className="nb-chip"
-                    style={{ background: meta.color, color: meta.shadow }}
-                  >
-                    {meta.label}
-                  </span>
-                </div>
-                <div className="p-4">
-                  <h3 className="text-sm font-black leading-snug text-[#F8FAFC]">
-                    {question.prompt}
-                  </h3>
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {question.options.map((option) => {
-                      const active = chosen === option.points;
-                      return (
-                        <button
-                          key={option.label}
-                          type="button"
-                          onClick={() =>
-                            setAnswers((prev) => ({
-                              ...prev,
-                              [question.id]: option.points,
-                            }))
-                          }
-                          className={[
-                            "flex items-center gap-2 border-2 border-black px-3 py-2 text-left text-xs font-bold transition-transform",
-                            active
-                              ? "bg-[#10B981] text-[#04110C] shadow-[3px_3px_0_0_#000]"
-                              : "bg-[#1E293B] text-[#CBD5E1] hover:bg-[#334155]",
-                          ].join(" ")}
-                        >
-                          {active && <Check className="size-3.5 shrink-0" strokeWidth={4} />}
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motion.article>
-            );
-          })}
-        </div>
+      {/* Progress */}
+      <div className="mt-4 h-4 border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)]">
+        <motion.div
+          className="h-full bg-[#10B981]"
+          animate={{ width: `${(index / (QUESTIONS.length - 1)) * 100}%` }}
+          transition={{ type: "spring", stiffness: 130, damping: 22 }}
+        />
+      </div>
 
-        {/* --------------------------------------------------- scorecard */}
-        <aside className="lg:sticky lg:top-24">
-          <section className="nb-panel">
-            <div className="flex items-center justify-between gap-3 border-b-2 border-black bg-[#111827] p-4">
-              <h2 className="nb-title text-sm">Your Scorecard</h2>
-              <span className="nb-chip bg-[#1E293B] text-[#10B981] tabular-nums">
-                {results.total} / {results.max}
+      {/* Single-question stage */}
+      <div className="relative mt-5">
+        <AnimatePresence mode="wait" custom={direction} initial={false}>
+          <motion.section
+            key={question.id}
+            custom={direction}
+            variants={slide}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="nb-panel"
+          >
+            <div className="nb-subpanel flex items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
+              <span className="nb-chip bg-[#10B981] text-[#04110C]">
+                {String(index + 1).padStart(2, "0")} / {QUESTIONS.length}
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
+                Pick the closest to you
               </span>
             </div>
 
-            <div className="flex flex-col gap-4 p-4">
-              {CATEGORY_ORDER.map((category) => {
-                const meta = CATEGORY_META[category];
-                const value = results.perCategory[category];
-                const pct = Math.round((value / MAX_PER_CATEGORY) * 100);
-                return (
-                  <div key={category}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black uppercase tracking-widest text-[#CBD5E1]">
-                        {meta.label}
+            <div className="p-5 md:p-6">
+              <h2 className="text-lg font-black leading-snug text-[var(--nb-text)] md:text-xl">
+                {question.prompt}
+              </h2>
+
+              <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {question.options.map((option) => {
+                  const active = answers[question.id] === option.kg;
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => handlePick(option.kg)}
+                      disabled={locked}
+                      className={[
+                        "nb-btn justify-start px-3 py-3 text-left text-xs",
+                        active
+                          ? "bg-[#10B981] text-[#04110C]"
+                          : "bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]",
+                      ].join(" ")}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="flex size-4 shrink-0 items-center justify-center border-2 border-[var(--nb-ink)]">
+                          {active && (
+                            <motion.span
+                              initial={{ scale: 0, rotate: -90 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <Check className="size-3" strokeWidth={4} />
+                            </motion.span>
+                          )}
+                        </span>
+                        {option.label}
                       </span>
-                      <span className="text-xs font-black tabular-nums text-[#F8FAFC]">
-                        {pct}%
-                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.section>
+        </AnimatePresence>
+      </div>
+
+      {/* Result */}
+      <AnimatePresence>
+        {complete && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="nb-panel mt-5"
+          >
+            <div className="nb-subpanel flex flex-wrap items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
+              <h2 className="nb-title text-sm">Your Result</h2>
+              <span
+                className="nb-chip ml-auto"
+                style={{ background: band.color, color: "#0B0F17" }}
+              >
+                {band.label}
+              </span>
+            </div>
+
+            <div className="p-5">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <p className="text-5xl font-black leading-none tabular-nums text-[var(--nb-text)] md:text-6xl">
+                    {(footprintKg / 1000).toFixed(2)}
+                  </p>
+                  <p className="mt-2 text-xs font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                    tonnes CO₂e per year
+                  </p>
+                </div>
+                <p className="max-w-sm flex-1 text-sm font-bold leading-relaxed text-[var(--nb-text-2)]">
+                  {band.note}
+                </p>
+              </div>
+
+              {/* Comparison bars */}
+              <div className="mt-5 flex flex-col gap-3">
+                {(
+                  [
+                    ["You", footprintKg, band.color],
+                    ["Indian average", INDIA_AVERAGE_KG, "#06B6D4"],
+                    ["World average", WORLD_AVERAGE_KG, "#94A3B8"],
+                  ] as const
+                ).map(([label, kg, color]) => {
+                  const pct = Math.min(100, (kg / WORLD_AVERAGE_KG) * 100);
+                  return (
+                    <div key={label}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                          {label}
+                        </span>
+                        <span className="text-xs font-black tabular-nums text-[var(--nb-text)]">
+                          {(kg / 1000).toFixed(2)} t
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-4 border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)]">
+                        <motion.div
+                          className="h-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                          style={{ background: color }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-2 h-4 border-2 border-black bg-[#0B0F17]">
-                      <div
-                        className="h-full border-2 border-black transition-[width] duration-300"
-                        style={{ width: `${pct}%`, background: meta.color }}
-                      />
-                    </div>
+                  );
+                })}
+              </div>
+
+              {/* City scale */}
+              {cityScale && population > 0 && (
+                <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                      If your city lived like you
+                    </p>
+                    <p className="mt-2 text-3xl font-black leading-none tabular-nums text-[#F43F5E]">
+                      {Math.round(cityScale.tonnes).toLocaleString()} t
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[var(--nb-text-dim)]">
+                      CO₂e a year
+                    </p>
                   </div>
-                );
-              })}
-
-              {complete && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="border-2 border-black p-4 text-black shadow-[4px_4px_0_0_#000]"
-                  style={{ background: grade(results.pct).color }}
-                >
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
-                    Overall Grade
-                  </p>
-                  <p className="mt-1 text-2xl font-black leading-none">
-                    {grade(results.pct).label}
-                  </p>
-                  <p className="mt-2 text-xs font-bold leading-relaxed">
-                    {grade(results.pct).note}
-                  </p>
-                </motion.div>
-              )}
-
-              {cityScale && complete && (
-                <div className="border-2 border-black bg-[#0B0F17] p-4">
-                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#06B6D4]">
-                    <Users className="size-3.5" strokeWidth={3} />
-                    If your city scored like you
-                  </p>
-                  <p className="mt-3 text-2xl font-black leading-none tabular-nums text-[#F8FAFC]">
-                    {cityScale.kgAvoided.toLocaleString()} kg
-                  </p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-                    CO2 avoided each year
-                  </p>
-                  <p className="mt-3 text-lg font-black leading-none tabular-nums text-[#10B981]">
-                    {cityScale.commuters.toLocaleString()}
-                  </p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[#64748B]">
-                    commuters shifting off cars
-                  </p>
+                  <div className="border-2 border-[var(--nb-ink)] bg-[#10B981] p-4 text-[#04110C]">
+                    <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest opacity-75">
+                      <TrendingDown className="size-3.5" strokeWidth={3} />
+                      Headroom vs national average
+                    </p>
+                    <p className="mt-2 text-3xl font-black leading-none tabular-nums">
+                      {Math.round(cityScale.savingsTonnes).toLocaleString()} t
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest opacity-75">
+                      could be cut each year
+                    </p>
+                  </div>
                 </div>
               )}
 
-              <div className="flex flex-col gap-2">
+              <p className="mt-5 flex items-start gap-2 text-[10px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+                <Users className="mt-0.5 size-3.5 shrink-0" strokeWidth={3} />
+                Estimated from your answers against standard per-activity emission
+                factors. This is an indicative personal tally, not an audited
+                calculation, and the city figures are scaled from it.
+              </p>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!complete || !isAuthenticated}
-                  className="nb-btn w-full justify-center bg-[#10B981] py-2.5 text-[#04110C] disabled:cursor-not-allowed disabled:bg-[#1E293B] disabled:text-[#64748B]"
+                  disabled={!isAuthenticated}
+                  className="nb-btn flex-1 justify-center bg-[#FBBF24] py-2.5 text-black disabled:cursor-not-allowed disabled:bg-[var(--nb-surface-2)] disabled:text-[var(--nb-text-dim)]"
                 >
-                  <Sparkles className="size-4" strokeWidth={3} />
+                  <Save className="size-4" strokeWidth={3} />
                   {isAuthenticated ? "Save Result" : "Sign In To Save"}
                 </button>
                 <button
                   type="button"
-                  onClick={handleReset}
-                  className="nb-btn w-full justify-center bg-[#1E293B] py-2 text-[#CBD5E1]"
+                  onClick={handleRestart}
+                  className="nb-btn flex-1 justify-center bg-[var(--nb-surface-2)] py-2.5 text-[var(--nb-text-2)]"
                 >
                   <RotateCcw className="size-4" strokeWidth={3} />
-                  Retake Quiz
+                  Retake
                 </button>
               </div>
 
               {savedAt && (
-                <p className="nb-chip bg-[#10B981] text-[#04110C]">
+                <p className="nb-chip mt-3 bg-[#10B981] text-[#04110C]">
                   Result saved
                 </p>
               )}
-              {user?.email && (
-                <p className="text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
-                  Signed in as {user.email}
-                </p>
-              )}
             </div>
-          </section>
-        </aside>
-      </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

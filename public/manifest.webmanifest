@@ -1,11 +1,11 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "URBIS India — Smart City Management",
+  "short_name": "URBIS India",
+  "description": "Smart city management platform with predictive urban analytics, citizen reporting and Census decade tracking.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
   "icons": [
     {
       "src": "/logo.svg",
