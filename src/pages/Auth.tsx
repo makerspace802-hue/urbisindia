@@ -84,9 +84,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
       navigate(redirect);
     } catch (error) {
-      console.error("OTP verification error:", error);
+      console.error("WRONG OTP HAHAHHA:", error);
 
-      setError("The verification code you entered is incorrect.");
+      setError("Nigga really entered the wrong OTP, holy.");
       setIsLoading(false);
 
       setOtp("");
@@ -97,9 +97,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Attempting anonymous sign in...");
+      console.log("'Say something bad about us while using Guest Mode in this Webpage? We'll still find you.' - Municipal Authorities");
       await signIn("anonymous");
-      console.log("Anonymous sign in successful");
+      console.log("Is he anonymous because he's black?");
       navigate(redirect);
     } catch (error) {
       console.error("Guest login error:", error);

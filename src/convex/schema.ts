@@ -16,6 +16,13 @@ export const roleValidator = v.union(
 );
 export type Role = Infer<typeof roleValidator>;
 
+const issueStatusValidator = v.union(
+  v.literal("New"),
+  v.literal("In Progress"),
+  v.literal("On Review"),
+  v.literal("Resolved"),
+);
+
 const schema = defineSchema(
   {
     // default auth tables using convex auth.
@@ -31,6 +38,53 @@ const schema = defineSchema(
 
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
+
+    // citizen issue tickets that residents report through the /report portal
+    issues: defineTable({
+      ticket: v.string(),
+      id: v.string(),
+      category: v.string(),
+      tag: v.string(),
+      tagColor: v.string(),
+      district: v.string(),
+      description: v.string(),
+      urgency: v.string(),
+      status: issueStatusValidator,
+      upvotes: v.number(),
+      createdAt: v.number(),
+      aiTag: v.string(),
+      reporterEmail: v.string(),
+      resolvedByAdminId: v.optional(v.string()),
+      resolvedAt: v.optional(v.number()),
+      resolution: v.optional(v.string()),
+    })
+      .index("by_ticket", ["ticket"])
+      .index("by_status", ["status"]),
+
+    // quiz results captured by the 15-question habit/usage/carbon-footprint quiz
+    quizScores: defineTable({
+      id: v.string(),
+      email: v.string(),
+      city: v.string(),
+      country: v.string(),
+      totalPoints: v.number(),
+      categoryPoints: v.object({
+        dailyHabits: v.number(),
+        usage: v.number(),
+        carbonFootprint: v.number(),
+      }),
+      createdAt: v.number(),
+    }),
+
+    // 10-year city-scale climate and mobility projections
+    projections: defineTable({
+      id: v.string(),
+      baseMicroClimateTempDropPerPersonCelsius: v.number(),
+      baseModalShiftPercentPerPerson: v.number(),
+      baseMuniHealthEnergySavingsPerPerson: v.number(),
+      population: v.number(),
+      years: v.array(v.number()),
+    }),
 
     // add other tables here
 
