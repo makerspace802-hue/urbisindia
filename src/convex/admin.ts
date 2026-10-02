@@ -1,6 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { users, issues } from "./schema";
+import {
+  mutation,
+  query,
+  defineTable,
+  GenericDatabaseReader,
+} from "./_generated/server";
 
 export const setRole = mutation({
   args: { role: v.union(v.literal("admin"), v.literal("user"), v.literal("member")) },
