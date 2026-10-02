@@ -2,6 +2,8 @@ import {
   CENSUS_ESTIMATED,
   CENSUS_INDICATORS,
   censusDelta,
+  changeRows,
+  directionOf,
   formatCensusValue,
   normalisedIndicators,
 } from "@/lib/census";
@@ -12,12 +14,15 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  LabelList,
   Legend,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,36 +33,71 @@ const AXIS_TICK = { fill: "#64748B", fontSize: 10, fontWeight: 700 } as const;
 const AXIS_LINE = { stroke: "#0B0F17", strokeWidth: 2 } as const;
 const Y2001 = "#06B6D4";
 const Y2011 = "#10B981";
+const UP = "#10B981";
+const DOWN = "#F43F5E";
+const FLAT = "#64748B";
+
+const DIRECTION_COLOUR: Record<string, string> = {
+  up: UP,
+  down: DOWN,
+  flat: FLAT,
+};
+
+type ChangeRow = ReturnType<typeof changeRows>[number];
+type RadarRow = ReturnType<typeof normalisedIndicators>[number];
 
 /**
- * Index every indicator to its 2001 value so wildly different units
- * (population counts against percentages) can share one comparison chart.
+ * Y-axis tick for the change chart: the indicator name with its real 2001 and
+ * 2011 figures underneath.
+ *
+ * A horizontal chart has room for the full label and the raw values, which is
+ * the whole reason this view replaced the rotated vertical one.
  */
-function indexedRows() {
-  return CENSUS_INDICATORS.map((row) => ({
-    label: row.label.length > 18 ? `${row.label.slice(0, 17)}…` : row.label,
-    full: row.label,
-    unit: row.unit,
-    // 2001 is the baseline, so it is always 100.
-    y2001: 100,
-    y2011: Math.round((row.y2011 / row.y2001) * 1000) / 10,
-    raw2001: row.y2001,
-    raw2011: row.y2011,
-  }));
+const CHANGE_ROWS = changeRows();
+const CHANGE_BY_LABEL = new Map(CHANGE_ROWS.map((r) => [r.short, r]));
+
+function ChangeTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+}) {
+  const row = CHANGE_BY_LABEL.get(payload?.value ?? "");
+  if (!row || x === undefined || y === undefined) return null;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={-10}
+        y={-3}
+        textAnchor="end"
+        fill="var(--nb-text)"
+        fontSize={11}
+        fontWeight={900}
+      >
+        {row.label}
+      </text>
+      <text x={-10} y={11} textAnchor="end" fill="var(--nb-text-dim)" fontSize={9} fontWeight={700}>
+        {formatCensusValue(row.y2001, row.unit)} → {formatCensusValue(row.y2011, row.unit)}
+      </text>
+    </g>
+  );
 }
 
-export default function CensusCharts() {
-  const [view, setView] = useState<"indexed" | "radar">("indexed");
 
-  const indexed = useMemo(() => indexedRows(), []);
+export default function CensusCharts() {
+  const [view, setView] = useState<"change" | "radar">("change");
+
+  const change = useMemo(() => changeRows(), []);
   const radar = useMemo(() => normalisedIndicators(), []);
 
   const radarData = radar.map((row) => ({
-    indicator:
-      row.label.length > 16 ? `${row.label.slice(0, 15)}…` : row.label,
+    indicator: row.short,
     full: row.label,
-    "2001 (indexed)": Math.round(row.y2001),
-    "2011 (indexed)": Math.round(row.y2011),
+    "2001": Math.round(row.y2001),
+    "2011": Math.round(row.y2011),
   }));
 
   return (
@@ -83,7 +123,7 @@ export default function CensusCharts() {
       <div className="flex flex-wrap items-center gap-2">
         {(
           [
-            ["indexed", "Indexed Comparison"],
+            ["change", "What Changed"],
             ["radar", "Profile Shape"],
           ] as const
         ).map(([key, label]) => (
@@ -103,8 +143,18 @@ export default function CensusCharts() {
           </button>
         ))}
         <span className="nb-chip ml-auto bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
-          <span className="size-2" style={{ background: Y2001 }} /> 2001
-          <span className="ml-2 size-2" style={{ background: Y2011 }} /> 2011
+          {view === "change" ? (
+            <>
+              <span className="size-2" style={{ background: UP }} /> Increased
+              <span className="ml-2 size-2" style={{ background: DOWN }} /> Decreased
+              <span className="ml-2 size-2" style={{ background: FLAT }} /> Unchanged
+            </>
+          ) : (
+            <>
+              <span className="size-2" style={{ background: Y2001 }} /> 2001
+              <span className="ml-2 size-2" style={{ background: Y2011 }} /> 2011
+            </>
+          )}
         </span>
       </div>
 
@@ -118,48 +168,130 @@ export default function CensusCharts() {
       >
         <div className="nb-subpanel border-b-2 border-[var(--nb-ink)] p-4">
           <h2 className="nb-title text-sm">
-            {view === "indexed"
-              ? "India 2001 → 2011: Every Indicator Indexed To 2001 = 100"
-              : "India 2001 → 2011: Shape Of The Decade"}
+            {view === "change"
+              ? "India 2001 → 2011: How Far Each Indicator Moved"
+              : "India 2001 → 2011: Profile Shape"}
           </h2>
           <p className="mt-1.5 text-[11px] font-bold leading-relaxed text-[var(--nb-text-muted)]">
-            {view === "indexed"
-              ? "Ten indicators spanning population, literacy, urbanisation, sex ratio, density, households and social group shares. Indexing to 2001 = 100 makes them directly comparable despite different units."
-              : "Each axis is scaled to its own range, so this shows which areas moved and by how much relative to their own starting point."}
+            {view === "change"
+              ? "Ten indicators spanning population, literacy, urbanisation, sex ratio, density, households and social group shares. Each bar is the percentage change from 2001, which lets indicators with completely different units share one axis. The real 2001 and 2011 figures sit under each label."
+              : "Each axis is scaled to the natural range of that measure (a literacy rate against 0-100%, a sex ratio against 700-1100), so both decades land at their true relative position and the outline shows where India actually stood."}
           </p>
         </div>
 
         <div className="p-3 md:p-4">
-          {view === "indexed" ? (
-            <div className="h-[380px] w-full">
+          {view === "change" ? (
+            <div className="h-[460px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={indexed}
-                  margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+                  data={change}
+                  layout="vertical"
+                  margin={{ top: 8, right: 56, bottom: 4, left: 8 }}
+                  barCategoryGap={8}
                 >
-                  <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
+                  <CartesianGrid stroke="rgba(100,116,139,0.35)" horizontal={false} />
                   <XAxis
-                    dataKey="label"
+                    type="number"
                     tick={AXIS_TICK}
                     tickLine={false}
                     axisLine={AXIS_LINE}
-                    angle={-38}
-                    height={110}
-                    interval={0}
-                    tickMargin={6}
+                    tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${v}%`}
                   />
                   <YAxis
-                    tick={AXIS_TICK}
+                    type="category"
+                    dataKey="short"
+                    width={168}
                     tickLine={false}
                     axisLine={AXIS_LINE}
-                    width={40}
-                    domain={[0, "auto"]}
+                    tick={<ChangeTick />}
+                    interval={0}
                   />
+                  <ReferenceLine x={0} stroke="#0B0F17" strokeWidth={2} />
                   <Tooltip
-                    cursor={{ fill: "rgba(11,15,23,0.4)" }}
+                    cursor={{ fill: "rgba(100,116,139,0.18)" }}
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const row = payload[0].payload as (typeof indexed)[number];
+                      const row = payload[0].payload as ChangeRow;
+                      return (
+                        <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                            {row.label}
+                          </p>
+                          <p className="mt-1 text-xs font-bold text-[var(--nb-text-2)]">
+                            2001:{" "}
+                            <span className="font-black tabular-nums text-[var(--nb-text)]">
+                              {formatCensusValue(row.y2001, row.unit)}
+                            </span>
+                          </p>
+                          <p className="text-xs font-bold text-[var(--nb-text-2)]">
+                            2011:{" "}
+                            <span className="font-black tabular-nums text-[var(--nb-text)]">
+                              {formatCensusValue(row.y2011, row.unit)}
+                            </span>
+                          </p>
+                          <p
+                            className="mt-1 text-xs font-black tabular-nums"
+                            style={{ color: DIRECTION_COLOUR[row.direction] }}
+                          >
+                            {row.changePct >= 0 ? "+" : ""}
+                            {row.changePct.toFixed(1)}% ·{" "}
+                            {row.direction === "up"
+                              ? "increased"
+                              : row.direction === "down"
+                                ? "decreased"
+                                : "unchanged"}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="changePct" name="Change vs 2001" radius={0} maxBarSize={26}>
+                    {change.map((row) => (
+                      <Cell
+                        key={row.key}
+                        fill={DIRECTION_COLOUR[row.direction]}
+                        stroke="#0B0F17"
+                        strokeWidth={1.5}
+                      />
+                    ))}
+                    <LabelList
+                      dataKey="changePct"
+                      position="right"
+                      formatter={(v: number) =>
+                        `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
+                      }
+                      style={{
+                        fill: "var(--nb-text)",
+                        fontSize: 10,
+                        fontWeight: 900,
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-[440px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData} outerRadius="70%">
+                  <PolarGrid stroke="rgba(100,116,139,0.35)" />
+                  <PolarAngleAxis
+                    dataKey="indicator"
+                    tick={{ fill: "var(--nb-text-muted)", fontSize: 10, fontWeight: 800 }}
+                  />
+                  {/* Coarse ticks only: a tick per 10 units stacked up into an
+                      unreadable blob in the middle of the polygon. */}
+                  <PolarRadiusAxis
+                    domain={[0, 100]}
+                    angle={90}
+                    tickCount={5}
+                    tick={{ fill: "var(--nb-text-dim)", fontSize: 9, fontWeight: 700 }}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const row = payload[0].payload as RadarRow & { full: string };
                       return (
                         <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2">
                           <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
@@ -167,74 +299,18 @@ export default function CensusCharts() {
                           </p>
                           <p className="mt-1 text-xs font-bold text-[var(--nb-text-2)]">
                             2001:{" "}
-                            <span className="font-black tabular-nums text-[var(--nb-text)]">
+                            <span className="font-black tabular-nums" style={{ color: Y2001 }}>
                               {formatCensusValue(row.raw2001, row.unit)}
                             </span>
                           </p>
                           <p className="text-xs font-bold text-[var(--nb-text-2)]">
                             2011:{" "}
-                            <span className="font-black tabular-nums text-[var(--nb-text)]">
+                            <span className="font-black tabular-nums" style={{ color: Y2011 }}>
                               {formatCensusValue(row.raw2011, row.unit)}
                             </span>
                           </p>
-                          <p className="mt-1 text-xs font-black tabular-nums text-[#10B981]">
-                            {row.y2011 >= 100 ? "+" : ""}
-                            {(row.y2011 - 100).toFixed(1)}% vs 2001
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: 10,
-                      fontWeight: 900,
-                      textTransform: "uppercase",
-                    }}
-                  />
-                  <Bar
-                    dataKey="y2001"
-                    name="2001 (index)"
-                    fill={Y2001}
-                    stroke="#0B0F17"
-                    strokeWidth={1.5}
-                    maxBarSize={26}
-                  />
-                  <Bar
-                    dataKey="y2011"
-                    name="2011 (index)"
-                    fill={Y2011}
-                    stroke="#0B0F17"
-                    strokeWidth={1.5}
-                    maxBarSize={26}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData} outerRadius="72%">
-                  <PolarGrid stroke="rgba(100,116,139,0.35)" />
-                  <PolarAngleAxis
-                    dataKey="indicator"
-                    tick={{ fill: "#64748B", fontSize: 9, fontWeight: 700 }}
-                  />
-                  <PolarRadiusAxis domain={[0, 100]} tick={AXIS_TICK} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const row = payload[0].payload as (typeof radarData)[number];
-                      return (
-                        <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
-                            {row.full}
-                          </p>
-                          <p className="mt-1 text-xs font-black text-[#06B6D4]">
-                            2001: {row["2001 (indexed)"]}
-                          </p>
-                          <p className="text-xs font-black text-[#10B981]">
-                            2011: {row["2011 (indexed)"]}
+                          <p className="mt-1 text-[10px] font-bold text-[var(--nb-text-dim)]">
+                            Scaled to {row.domain[0]}–{row.domain[1]}
                           </p>
                         </div>
                       );
@@ -248,24 +324,37 @@ export default function CensusCharts() {
                     }}
                   />
                   <Radar
-                    name="2001 (indexed)"
-                    dataKey="2001 (indexed)"
+                    name="2001"
+                    dataKey="2001"
                     stroke={Y2001}
                     strokeWidth={3}
                     fill={Y2001}
-                    fillOpacity={0.28}
+                    fillOpacity={0.22}
+                    dot={{ r: 2, fill: Y2001, strokeWidth: 0 }}
                   />
                   <Radar
-                    name="2011 (indexed)"
-                    dataKey="2011 (indexed)"
+                    name="2011"
+                    dataKey="2011"
                     stroke={Y2011}
                     strokeWidth={3}
                     fill={Y2011}
-                    fillOpacity={0.28}
+                    fillOpacity={0.22}
+                    dot={{ r: 2, fill: Y2011, strokeWidth: 0 }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
+          )}
+
+          {view === "change" && (
+            <p className="border-t-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-4 py-2.5 text-[10px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+              Bars show <span className="font-black text-[var(--nb-text-2)]">relative change from the 2001 level</span>,
+              which is what lets ten different units share one axis. Read them
+              alongside the real figures printed under each label: a small
+              share such as Scheduled Tribe moves from 1.1% to 0.8%, a fall of
+              only 0.3 points, but it is 27% of a small base and so draws a long
+              bar.
+            </p>
           )}
         </div>
       </motion.section>
@@ -278,7 +367,10 @@ export default function CensusCharts() {
         <div className="flex flex-col gap-2 p-3 md:p-4">
           {[...CENSUS_INDICATORS, ...CENSUS_ESTIMATED].map((row, index) => {
             const delta = censusDelta(row);
-            const improved = row.key === "childsexratio" || row.key === "st" ? delta.absolute < 0 : delta.absolute > 0;
+            const direction = directionOf(
+              delta.absolute,
+              row.unit === "%" ? 0.05 : 0,
+            );
             return (
               <motion.div
                 key={row.key}
@@ -308,9 +400,11 @@ export default function CensusCharts() {
                   <span
                     className={[
                       "nb-chip",
-                      improved
+                      direction === "up"
                         ? "bg-[#10B981] text-[#04110C]"
-                        : "bg-[#F43F5E] text-black",
+                        : direction === "down"
+                          ? "bg-[#F43F5E] text-black"
+                          : "bg-[#64748B] text-black",
                     ].join(" ")}
                   >
                     {delta.absolute > 0 ? "+" : ""}
