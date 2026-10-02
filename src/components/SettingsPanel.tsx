@@ -39,7 +39,7 @@ export function SettingsPanel({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.15, ease: "easeOut" }}
-          className="nb-panel absolute left-0 top-full z-[60] mt-2 w-72"
+          className="nb-panel absolute right-0 top-full z-[60] mt-2 w-72 max-w-[calc(100vw-2rem)]"
           role="dialog"
           aria-label="Settings"
         >
