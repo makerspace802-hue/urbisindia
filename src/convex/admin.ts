@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { normaliseEmail, requireAdminEmail } from "./identity";
 import { roleValidator } from "./schema";
 
 const issueStatusValidator = v.union(
@@ -10,27 +11,70 @@ const issueStatusValidator = v.union(
   v.literal("Resolved"),
 );
 
-/** Is the signed-in user an URBIS admin? Used to gate the resolve controls. */
+/**
+ * Is the signed-in user an URBIS admin? Used to gate the resolve controls.
+ *
+ * Delegates to the email-keyed check in `identity.ts`. The old version read
+ * `role` off the user row, which is why admin appeared to vanish whenever
+ * somebody signed in through a provider they had not used before.
+ */
 export const isAdmin = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return false;
-    const user = await ctx.db.get(userId);
-    return user?.role === "admin";
+    try {
+      await requireAdminEmail(ctx);
+      return true;
+    } catch {
+      return false;
+    }
   },
 });
 
-/** Grant an account the admin role. Only usable by an existing admin. */
+/**
+ * Grant the admin role to a user row. Kept for the existing admin panel.
+ *
+ * Prefer `identity.grantAdminByEmail`: it follows the person across every
+ * sign-in provider, whereas setting `role` here only affects the single user
+ * row that happened to be created by the current provider.
+ */
 export const setRole = mutation({
   args: { userId: v.id("users"), role: roleValidator },
   handler: async (ctx, args) => {
-    const callerId = await getAuthUserId(ctx);
-    if (!callerId) throw new Error("Unauthenticated");
-    const caller = await ctx.db.get(callerId);
-    if (caller?.role !== "admin") throw new Error("Admins only");
+    await requireAdminEmail(ctx);
     await ctx.db.patch(args.userId, { role: args.role });
     return args.userId;
+  },
+});
+
+/** Every admin email, for the admin panel. */
+export const listAdminEmails = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdminEmail(ctx);
+    const grants = await ctx.db.query("adminGrants").collect();
+    return grants.map((g) => g.email);
+  },
+});
+
+/** Grant admin to an email. Survives provider changes. */
+export const grantAdmin = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const { email } = await requireAdminEmail(ctx);
+    const target = normaliseEmail(args.email);
+    if (!target) throw new Error("A valid email is required");
+    const existing = await ctx.db
+      .query("adminGrants")
+      .withIndex("by_email", (q) => q.eq("email", target))
+      .first();
+    if (!existing) {
+      await ctx.db.insert("adminGrants", {
+        email: target,
+        grantedBy: email,
+        createdAt: Date.now(),
+      });
+    }
+    return target;
   },
 });
 
@@ -138,10 +182,7 @@ export const resolveIssue = mutation({
     status: v.optional(issueStatusValidator),
   },
   handler: async (ctx, { ticket, resolution, status }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthenticated");
-    const user = await ctx.db.get(userId);
-    if (user?.role !== "admin") throw new Error("Admins only");
+    const { userId, email } = await requireAdminEmail(ctx);
 
     const row = await ctx.db
       .query("issues")
@@ -154,7 +195,7 @@ export const resolveIssue = mutation({
       status: status ?? "Resolved",
       resolution,
       resolvedAt,
-      resolvedBy: user.email ?? userId,
+      resolvedBy: email || userId,
     });
 
     return { ticket, status: status ?? "Resolved", resolvedAt };

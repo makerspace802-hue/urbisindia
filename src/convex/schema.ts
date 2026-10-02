@@ -91,6 +91,33 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_city", ["city"]),
 
+    // -------------------------------------------------------------------------
+    // Admin grants are keyed by EMAIL, not by user id.
+    //
+    // Convex Auth creates a separate `users` row for every distinct sign-in
+    // provider (google / email-otp / password). The old admin flag lived on the
+    // user row, so signing in through a different provider produced a NEW row
+    // with no role, and the admin UI disappeared. Keying the grant on the
+    // normalized email means the same human keeps admin no matter which
+    // provider created the row, and no matter how many rows now exist for them.
+    // -------------------------------------------------------------------------
+    adminGrants: defineTable({
+      email: v.string(),
+      /** Who granted it, for the audit trail in the admin panel. */
+      grantedBy: v.optional(v.string()),
+      createdAt: v.number(),
+    }).index("by_email", ["email"]),
+
+    // Which sign-in providers an account has actually used, so the UI can
+    // offer "set a password" only where it is meaningful and can report
+    // "you already have a password" instead of silently failing.
+    accountPasswords: defineTable({
+      email: v.string(),
+      /** Convex Auth user id the password account is attached to. */
+      userId: v.optional(v.string()),
+      createdAt: v.number(),
+    }).index("by_email", ["email"]),
+
     // add other tables here
 
     // tableName: defineTable({
