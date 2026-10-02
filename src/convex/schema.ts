@@ -65,6 +65,12 @@ const schema = defineSchema(
       resolvedBy: v.optional(v.string()),
       resolvedAt: v.optional(v.number()),
       resolution: v.optional(v.string()),
+      /**
+       * Convex file storage id for the photo attached to this report.
+       * Without it the pick-a-photo control only ever produced a local blob
+       * URL that vanished on submit, so attached images were never visible.
+       */
+      storageId: v.optional(v.string()),
     })
       .index("by_ticket", ["ticket"])
       .index("by_status", ["status"])

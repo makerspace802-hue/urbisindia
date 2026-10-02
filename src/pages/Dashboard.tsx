@@ -1,5 +1,4 @@
 import { api } from "@/convex/_generated/api";
-import { NbSwitch } from "@/components/NbControls";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -28,7 +27,6 @@ export default function Dashboard() {
   const [country, setCountry] = useState("");
   const [image, setImage] = useState("");
   const [saved, setSaved] = useState(false);
-  const [compact, setCompact] = useState(false);
 
   // Seed the form once the profile query resolves. Adjusting state during
   // render (rather than in an effect) avoids a cascading second render.
@@ -255,13 +253,6 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div className="border-t-2 border-[var(--nb-ink)] pt-4">
-                <NbSwitch
-                  label="Compact Data Density"
-                  checked={compact}
-                  onChange={setCompact}
-                />
-              </div>
 
               <button
                 type="submit"

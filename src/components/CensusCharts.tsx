@@ -95,7 +95,7 @@ export default function CensusCharts() {
 
   const radarData = radar.map((row) => ({
     indicator: row.short,
-    full: row.label,
+    ...row,
     "2001": Math.round(row.y2001),
     "2011": Math.round(row.y2011),
   }));
@@ -186,7 +186,7 @@ export default function CensusCharts() {
                 <BarChart
                   data={change}
                   layout="vertical"
-                  margin={{ top: 8, right: 56, bottom: 4, left: 8 }}
+                  margin={{ top: 8, right: 72, bottom: 4, left: 8 }}
                   barCategoryGap={8}
                 >
                   <CartesianGrid stroke="rgba(100,116,139,0.35)" horizontal={false} />
@@ -196,6 +196,9 @@ export default function CensusCharts() {
                     tickLine={false}
                     axisLine={AXIS_LINE}
                     tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${v}%`}
+                    // Headroom past the longest bar, otherwise its value label
+                    // is drawn outside the plot and gets clipped.
+                    domain={["dataMin - 6", "dataMax + 12"]}
                   />
                   <YAxis
                     type="category"
@@ -257,13 +260,17 @@ export default function CensusCharts() {
                     <LabelList
                       dataKey="changePct"
                       position="right"
+                      offset={8}
                       formatter={(v: number) =>
                         `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
                       }
                       style={{
                         fill: "var(--nb-text)",
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: 900,
+                        paintOrder: "stroke",
+                        stroke: "var(--nb-bg)",
+                        strokeWidth: 3,
                       }}
                     />
                   </Bar>
@@ -291,11 +298,11 @@ export default function CensusCharts() {
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const row = payload[0].payload as RadarRow & { full: string };
+                      const row = payload[0].payload as RadarRow;
                       return (
                         <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2">
                           <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
-                            {row.full}
+                            {row.label}
                           </p>
                           <p className="mt-1 text-xs font-bold text-[var(--nb-text-2)]">
                             2001:{" "}

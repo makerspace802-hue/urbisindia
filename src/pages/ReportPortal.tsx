@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { Check, ChevronUp, ImagePlus, Send, ShieldCheck, Wrench, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -74,6 +74,7 @@ interface CitizenReport {
   reporterEmail: string;
   resolution?: string;
   resolvedAt?: number;
+  storageId?: string | null;
 }
 
 function timeAgo(timestamp: number): string {
@@ -92,6 +93,9 @@ export default function ReportPortal() {
 
   const liveIssues = useQuery(api.admin.listIssues);
   const isAdmin = useQuery(api.admin.isAdmin);
+  const getUploadUrl = useAction(api.admin.uploadUrl);
+  // Resolves every attached photo to a real URL in one round trip.
+  const imageUrls = useQuery(api.admin.imageUrls) ?? {};
   const submitIssue = useMutation(api.admin.submitIssue);
   const upvoteIssue = useMutation(api.admin.upvoteIssue);
   const resolveIssue = useMutation(api.admin.resolveIssue);
@@ -107,12 +111,14 @@ export default function ReportPortal() {
   const [urgency, setUrgency] = useState<Urgency>("Medium");
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [success, setSuccess] = useState<{
     ticket: string;
     aiTag: string;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const reports: CitizenReport[] = liveIssues ?? [];
 
@@ -139,6 +145,24 @@ export default function ReportPortal() {
     previewUrlRef.current = next;
     setFileName(file.name);
     setPreviewUrl(next);
+    // Hold the real File so it can be uploaded on submit. The blob URL above
+    // is only a local preview and is not what gets stored.
+    setPendingFile(file.type.startsWith("image/") ? file : null);
+  };
+
+  /** Push the chosen photo into Convex file storage. */
+  const uploadPhoto = async (file: File): Promise<string | undefined> => {
+    const url = await getUploadUrl();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error(`Photo upload failed (${response.status})`);
+    }
+    const { storageId } = (await response.json()) as { storageId?: string };
+    return storageId;
   };
 
   const clearForm = () => {
@@ -148,6 +172,7 @@ export default function ReportPortal() {
     setUrgency("Medium");
     setFileName(null);
     setPreviewUrl(null);
+    setPendingFile(null);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -159,6 +184,21 @@ export default function ReportPortal() {
     const aiTag = `[AI Priority Tag: ${urgency} - Routed to ${match.dept}]`;
     setSubmitting(true);
     try {
+      // Upload the photo FIRST so the ticket never lands without it.
+      let storageId: string | undefined;
+      if (pendingFile) {
+        try {
+          storageId = await uploadPhoto(pendingFile);
+        } catch (uploadError) {
+          console.error("Photo upload failed:", uploadError);
+          setError(
+            "Your photo could not be uploaded, so the report was not filed. Please try again.",
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const result = await submitIssue({
         category: match.value,
         tag: match.tag,
@@ -167,12 +207,19 @@ export default function ReportPortal() {
         description: description.trim(),
         urgency,
         aiTag,
+        storageId,
       });
       setSuccess({ ticket: result.ticket, aiTag });
+      setError(null);
       clearForm();
-    } catch (error) {
+    } catch (err) {
       setSuccess(null);
-      console.error("Report submission failed:", error);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while filing the report. Please try again.",
+      );
+      console.error("Report submission failed:", err);
     } finally {
       setSubmitting(false);
     }
@@ -223,6 +270,21 @@ export default function ReportPortal() {
           </span>
         </div>
       </div>
+
+      {/* Error alert */}
+      {error && (
+        <div
+          className="nb-panel mt-5 border-l-[8px] border-l-[#F43F5E] p-4"
+          role="alert"
+        >
+          <p className="text-xs font-black uppercase tracking-wide text-[#F43F5E]">
+            Could Not File Report
+          </p>
+          <p className="mt-1 text-xs font-bold leading-relaxed text-[var(--nb-text-2)]">
+            {error}
+          </p>
+        </div>
+      )}
 
       {/* Success alert */}
       {success && (
@@ -485,6 +547,23 @@ export default function ReportPortal() {
                 <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
                   {report.description}
                 </p>
+
+                {/* Attached photo, resolved from Convex file storage. */}
+                {report.storageId && imageUrls[report.storageId] && (
+                  <a
+                    href={imageUrls[report.storageId]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 block border-2 border-[var(--nb-ink)]"
+                  >
+                    <img
+                      src={imageUrls[report.storageId]}
+                      alt={`Photo attached to ${report.ticket}`}
+                      loading="lazy"
+                      className="max-h-72 w-full bg-[var(--nb-bg)] object-cover"
+                    />
+                  </a>
+                )}
 
                 {report.resolution && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-2 border-[var(--nb-ink)] bg-[#10B981] p-2.5">

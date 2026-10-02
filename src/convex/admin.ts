@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import { normaliseEmail, requireAdminEmail } from "./identity";
 import { roleValidator } from "./schema";
 
@@ -78,6 +78,60 @@ export const grantAdmin = mutation({
   },
 });
 
+/**
+ * A one-time URL the browser POSTs an image file to.
+ *
+ * The upload has to go through Convex file storage rather than being kept as a
+ * local `blob:` URL: a blob URL only exists in the tab that created it, so an
+ * attached photo disappeared the moment the report was submitted.
+ */
+export const uploadUrl = action({
+  args: {},
+  handler: async (ctx) => {
+    // Any signed-in resident can attach a photo; submitting the report itself
+    // enforces the same requirement.
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to attach a photo");
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Resolves stored images to URLs for the public report feed.
+ *
+ * Returns a map keyed by storage id so the client can render every attachment
+ * with a single query instead of one request per ticket.
+ */
+export const imageUrls = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("issues")
+      .withIndex("by_created_at")
+      .order("desc")
+      .take(200);
+
+    const entries = await Promise.all(
+      rows
+        .filter((row): row is typeof row & { storageId: string } =>
+          typeof row.storageId === "string" && row.storageId.length > 0,
+        )
+        .map(async (row) => {
+          try {
+            const url = await ctx.storage.getUrl(row.storageId);
+            return url ? ([row.storageId, url] as const) : null;
+          } catch {
+            // A storage id can outlive its blob; skip it rather than fail the
+            // whole feed.
+            return null;
+          }
+        }),
+    );
+
+    return Object.fromEntries(entries.filter((e) => e !== null));
+  },
+});
+
 /** Public feed backing the /report portal. */
 export const listIssues = query({
   args: {},
@@ -87,6 +141,7 @@ export const listIssues = query({
       ticket: row.ticket,
       category: row.category,
       tag: row.tag,
+      storageId: row.storageId ?? null,
       tagColor: row.tagColor,
       district: row.district,
       description: row.description,
@@ -124,6 +179,8 @@ export const submitIssue = mutation({
     description: v.string(),
     urgency: v.string(),
     aiTag: v.string(),
+    /** File storage id from `uploadUrl`, when a photo was attached. */
+    storageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -151,6 +208,7 @@ export const submitIssue = mutation({
       createdAt: Date.now(),
       aiTag: args.aiTag,
       reporterEmail: user?.email ?? "anonymous",
+      storageId: args.storageId,
     });
 
     return { ticket, aiTag: args.aiTag, status: "New" as const };

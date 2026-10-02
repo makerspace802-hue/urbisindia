@@ -61,21 +61,6 @@ const KPIS: Kpi[] = [
   },
 ];
 
-const ALERTS = [
-  {
-    type: "Alert",
-    typeClass: "bg-[#F43F5E] text-black",
-    time: "2 min ago",
-    text: "Dynamic Shade Canopies deployed at Sector 4 Bus Hub due to 39°C surface heat.",
-  },
-  {
-    type: "Traffic",
-    typeClass: "bg-[#06B6D4] text-[#03151A]",
-    time: "8 min ago",
-    text: "Autonomous Bus Lane priority activated along Expressway 21; congestion cleared by 18%.",
-  },
-];
-
 /** Category colours for the live community feed on the dashboard. */
 const TAG_COLORS: Record<string, string> = {
   "Heat/Shade": "#F43F5E",
@@ -274,38 +259,6 @@ export default function CommandCenter() {
         <CensusCharts />
       </section>
 
-      {/* Live alert ticker */}
-      <section className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="nb-title text-sm md:text-base">Live Alert Ticker</h2>
-          <span className="nb-chip bg-[var(--nb-surface-2)] text-[#10B981]">
-            <span className="size-2 animate-pulse bg-[#10B981]" />
-            2 Active
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {ALERTS.map((alert, index) => (
-            <motion.article
-              key={alert.type}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.25, delay: index * 0.06 }}
-              className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
-            >
-              <div className="flex items-center gap-2">
-                <span className={`nb-chip ${alert.typeClass}`}>{alert.type}</span>
-                <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                  {alert.time}
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
-                {alert.text}
-              </p>
-            </motion.article>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
