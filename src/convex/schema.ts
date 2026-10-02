@@ -23,6 +23,13 @@ const issueStatusValidator = v.union(
   v.literal("Resolved"),
 );
 
+const yearPointValidator = v.object({
+  year: v.number(),
+  tempDrop: v.number(),
+  modalShift: v.number(),
+  savings: v.number(),
+});
+
 const schema = defineSchema(
   {
     // default auth tables using convex auth.
@@ -37,12 +44,13 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+      city: v.optional(v.string()),
+      country: v.optional(v.string()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // citizen issue tickets that residents report through the /report portal
+    // citizen issue tickets filed through the /report portal
     issues: defineTable({
       ticket: v.string(),
-      id: v.string(),
       category: v.string(),
       tag: v.string(),
       tagColor: v.string(),
@@ -54,16 +62,16 @@ const schema = defineSchema(
       createdAt: v.number(),
       aiTag: v.string(),
       reporterEmail: v.string(),
-      resolvedByAdminId: v.optional(v.string()),
+      resolvedBy: v.optional(v.string()),
       resolvedAt: v.optional(v.number()),
       resolution: v.optional(v.string()),
     })
       .index("by_ticket", ["ticket"])
-      .index("by_status", ["status"]),
+      .index("by_status", ["status"])
+      .index("by_created_at", ["createdAt"]),
 
-    // quiz results captured by the 15-question habit/usage/carbon-footprint quiz
+    // results from the 15-question habit / usage / carbon-footprint quiz
     quizScores: defineTable({
-      id: v.string(),
       email: v.string(),
       city: v.string(),
       country: v.string(),
@@ -74,17 +82,18 @@ const schema = defineSchema(
         carbonFootprint: v.number(),
       }),
       createdAt: v.number(),
-    }),
+    }).index("by_email", ["email"]),
 
-    // 10-year city-scale climate and mobility projections
+    // saved 10-year city outlooks from the climate & mobility simulator
     projections: defineTable({
-      id: v.string(),
-      baseMicroClimateTempDropPerPersonCelsius: v.number(),
-      baseModalShiftPercentPerPerson: v.number(),
-      baseMuniHealthEnergySavingsPerPerson: v.number(),
+      city: v.string(),
       population: v.number(),
-      years: v.array(v.number()),
-    }),
+      canopyBonus: v.number(),
+      toll: v.number(),
+      misting: v.boolean(),
+      points: v.array(yearPointValidator),
+      createdAt: v.number(),
+    }).index("by_city", ["city"]),
 
     // add other tables here
 

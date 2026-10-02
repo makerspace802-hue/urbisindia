@@ -116,7 +116,7 @@ export default function CommandCenter() {
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
-          Executive Command Center
+          Dashboard
         </h1>
         <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">{today}</span>
       </div>

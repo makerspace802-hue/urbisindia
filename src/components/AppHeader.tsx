@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router";
 
 const TABS = [
-  { to: "/", label: "Command Center", end: true },
+  { to: "/", label: "Dashboard", end: true },
   { to: "/analytics", label: "Analytics" },
   { to: "/report", label: "Report Issue" },
+  { to: "/quiz", label: "Quiz" },
 ];
 
 export function AppHeader() {
@@ -34,7 +35,7 @@ export function AppHeader() {
         </Link>
 
         {/* City status pill */}
-        <span className="nb-chip bg-[#1E293B] text-[#10B981]">
+        <span className="nb-chip hidden bg-[#1E293B] text-[#10B981] sm:inline-flex">
           <span className="size-2 animate-pulse bg-[#10B981] shadow-[0_0_8px_2px_#10B981]" />
           City Status: OPTIMAL
         </span>

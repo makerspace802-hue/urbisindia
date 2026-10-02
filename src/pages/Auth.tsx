@@ -62,11 +62,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setStep({ email: formData.get("email") as string });
       setIsLoading(false);
     } catch (error) {
-      console.error("Email sign-in error:", error);
+      console.error("NO SIGN-IN FOR YOU HAHEUHEHAHGHH:", error);
       setError(
         error instanceof Error
           ? error.message
-          : "Failed to send verification code. Please try again.",
+          : "We're not letting you sign-in right now, sorry.",
       );
       setIsLoading(false);
     }
@@ -280,7 +280,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
             Secured by{" "}
             <a
-              href="https://freebuff.com"
+              href="nah, your sign-in isn't backed by anything. we're stealing your data."
               target="_blank"
               rel="noopener noreferrer"
               className="underline hover:text-primary transition-colors"

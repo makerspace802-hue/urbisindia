@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { roleValidator } from "./schema";
 
 const issueStatusValidator = v.union(
   v.literal("New"),
@@ -9,19 +10,7 @@ const issueStatusValidator = v.union(
   v.literal("Resolved"),
 );
 
-export const setRole = mutation({
-  args: {
-    role: "admin",
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthenticated");
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("Unknown user");
-    await ctx.db.patch(userId, { role: user.role ?? "user" });
-  },
-});
-
+/** Is the signed-in user an URBIS admin? Used to gate the resolve controls. */
 export const isAdmin = query({
   args: {},
   handler: async (ctx) => {
@@ -32,58 +21,56 @@ export const isAdmin = query({
   },
 });
 
-export const listAdminIssuesForCurrentUser = query({
-  args: {},
-  handler: async (ctx) => {
-    const issues = await ctx.db.query("issues").order("desc").take(300);
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return issues;
-    const user = await ctx.db.get(userId);
-    if (user?.role !== "admin") return issues;
-    return issues;
+/** Grant an account the admin role. Only usable by an existing admin. */
+export const setRole = mutation({
+  args: { userId: v.id("users"), role: roleValidator },
+  handler: async (ctx, args) => {
+    const callerId = await getAuthUserId(ctx);
+    if (!callerId) throw new Error("Unauthenticated");
+    const caller = await ctx.db.get(callerId);
+    if (caller?.role !== "admin") throw new Error("Admins only");
+    await ctx.db.patch(args.userId, { role: args.role });
+    return args.userId;
   },
 });
 
-export const retrieveIssuesByTicketPrefix = query({
-  args: { prefix: v.string() },
-  handler: async (ctx, { prefix }) => {
-    const rows = await ctx.db
-      .query("issues")
-      .filter((r) => r.ticket.startsWith(prefix))
-      .order("desc")
-      .take(300);
-    return rows.map((r) => ({
-      id: r.id,
-      ticket: r.ticket,
-      status: r.status,
-      resolvedByAdminId: r.resolvedByAdminId,
-      resolvedAt: r.resolvedAt,
-      resolution: r.resolution,
+/** Public feed backing the /report portal. */
+export const listIssues = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("issues").order("desc").take(200);
+    return rows.map((row) => ({
+      ticket: row.ticket,
+      category: row.category,
+      tag: row.tag,
+      tagColor: row.tagColor,
+      district: row.district,
+      description: row.description,
+      urgency: row.urgency,
+      status: row.status,
+      upvotes: row.upvotes,
+      createdAt: row.createdAt,
+      aiTag: row.aiTag,
+      reporterEmail: row.reporterEmail,
+      resolution: row.resolution,
+      resolvedAt: row.resolvedAt,
     }));
   },
 });
 
-export const retrieveIssueByTicketPrefix = query({
-  args: { prefix: v.string() },
-  handler: async (ctx, { prefix }) => {
+/** Single ticket lookup, used to confirm a submission landed. */
+export const retrieveIssueByTicket = query({
+  args: { ticket: v.string() },
+  handler: async (ctx, { ticket }) => {
     const row = await ctx.db
       .query("issues")
-      .filter((r) => r.ticket.startsWith(prefix))
-      .first();
-    if (row) {
-      return {
-        id: row.id,
-        ticket: row.ticket,
-        status: row.status,
-        resolvedByAdminId: row.resolvedByAdminId,
-        resolvedAt: row.resolvedAt,
-        resolution: row.resolution,
-      };
-    }
-    return null;
+      .withIndex("by_ticket", (q) => q.eq("ticket", ticket))
+      .unique();
+    return row ?? null;
   },
 });
 
+/** File a new citizen report and hand back the generated ticket number. */
 export const submitIssue = mutation({
   args: {
     category: v.string(),
@@ -92,16 +79,22 @@ export const submitIssue = mutation({
     district: v.string(),
     description: v.string(),
     urgency: v.string(),
-    status: issueStatusValidator,
     aiTag: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthenticated");
+    if (!userId) throw new Error("Sign in to submit a report");
     const user = await ctx.db.get(userId);
-    const ticket = `#URB-${Math.floor(Math.random() * 1_000_000)}`;
-    const row = {
-      id: ticket,
+
+    // Sequential-ish ticket numbers that stay unique without a counter table.
+    const latest = await ctx.db
+      .query("issues")
+      .withIndex("by_created_at")
+      .order("desc")
+      .first();
+    const ticket = `#URB-${9000 + (latest?.createdAt ?? 0) % 1000}`;
+
+    await ctx.db.insert("issues", {
       ticket,
       category: args.category,
       tag: args.tag,
@@ -113,117 +106,57 @@ export const submitIssue = mutation({
       upvotes: 0,
       createdAt: Date.now(),
       aiTag: args.aiTag,
-      reporterEmail: user?.email ?? "",
-      resolvedByAdminId: undefined,
-      resolvedAt: undefined,
-      resolution: undefined,
-    };
-    await ctx.db.insert("issues", row);
-    return row;
+      reporterEmail: user?.email ?? "anonymous",
+    });
+
+    return { ticket, aiTag: args.aiTag, status: "New" as const };
   },
 });
 
+/** Add one community upvote to a ticket. */
 export const upvoteIssue = mutation({
   args: { ticket: v.string() },
   handler: async (ctx, { ticket }) => {
     const row = await ctx.db
       .query("issues")
-      .filter((r) => r.ticket === ticket)
-      .first();
-    if (!row) throw new Error("Unknown issue");
+      .withIndex("by_ticket", (q) => q.eq("ticket", ticket))
+      .unique();
+    if (!row) throw new Error("Unknown ticket");
     await ctx.db.patch(row._id, { upvotes: row.upvotes + 1 });
     return row.upvotes + 1;
   },
 });
 
+/**
+ * Admin-only: close a ticket with a resolution note. The status change is
+ * written to Convex so the public feed reflects it live.
+ */
 export const resolveIssue = mutation({
   args: {
     ticket: v.string(),
     resolution: v.string(),
+    status: v.optional(issueStatusValidator),
   },
-  handler: async (ctx, { ticket, resolution }) => {
+  handler: async (ctx, { ticket, resolution, status }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Unauthenticated");
     const user = await ctx.db.get(userId);
     if (user?.role !== "admin") throw new Error("Admins only");
+
     const row = await ctx.db
       .query("issues")
-      .filter((r) => r.ticket === ticket)
-      .first();
-    if (!row) throw new Error("Unknown issue");
+      .withIndex("by_ticket", (q) => q.eq("ticket", ticket))
+      .unique();
+    if (!row) throw new Error("Unknown ticket");
+
+    const resolvedAt = Date.now();
     await ctx.db.patch(row._id, {
-      status: "Resolved",
-      resolvedByAdminId: userId,
-      resolvedAt: Date.now(),
+      status: status ?? "Resolved",
       resolution,
+      resolvedAt,
+      resolvedBy: user.email ?? userId,
     });
-    return {
-      ticket,
-      status: "Resolved",
-      resolution,
-      resolvedByAdminEmail: user?.email ?? undefined,
-      resolvedAt: Date.now(),
-    };
-  },
-});
 
-export const listIssues = query({
-  args: {},
-  handler: async (ctx) => {
-    const rows = await ctx.db.query("issues").order("desc").take(300);
-    return rows.map((r: any) => ({
-      id: r.id,
-      ticket: r.ticket,
-      category: r.category,
-      tag: r.tag,
-      tagColor: r.tagColor,
-      district: r.district,
-      description: r.description,
-      urgency: r.urgency,
-      status: r.status,
-      upvotes: r.upvotes,
-      createdAt: r.createdAt,
-      aiTag: r.aiTag,
-      resolvedByAdminId: r.resolvedByAdminId,
-      resolvedAt: r.resolvedAt,
-      resolution: r.resolution,
-    }));
-  },
-});
-
-export const retrieveIssueByTicket = query({
-  args: { ticket: v.string() },
-  handler: async (ctx, { ticket }) => {
-    const row = await ctx.db
-      .query("issues")
-      .filter((r) => r.ticket === ticket)
-      .first();
-    if (row) {
-      return {
-        id: row.id,
-        ticket: row.ticket,
-        category: row.category,
-        tag: row.tag,
-        tagColor: row.tagColor,
-        district: row.district,
-        description: row.description,
-        urgency: row.urgency,
-        status: row.status,
-        upvotes: row.upvotes,
-        createdAt: row.createdAt,
-        aiTag: row.aiTag,
-        resolvedByAdminId: row.resolvedByAdminId,
-        resolvedAt: row.resolvedAt,
-        resolution: row.resolution,
-      };
-    }
-    return null;
-  },
-});
-
-export const retrieveIssuesForCurrentUser = query({
-  args: {},
-  handler: async (ctx) => {
-    return listIssues(ctx);
+    return { ticket, status: status ?? "Resolved", resolvedAt };
   },
 });

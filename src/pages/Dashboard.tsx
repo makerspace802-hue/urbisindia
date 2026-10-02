@@ -1,55 +1,292 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { api } from "@/convex/_generated/api";
+import { NbSwitch } from "@/components/NbControls";
 import { useAuth } from "@/hooks/use-auth";
-import { LayoutDashboard, LogOut } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useMutation, useQuery } from "convex/react";
+import {
+  Building2,
+  Check,
+  LogOut,
+  MapPin,
+  Settings,
+  Sparkles,
+  User,
+} from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router";
 
 export default function Dashboard() {
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
+
+  const profile = useQuery(api.profile.myProfile);
+  const quizScore = useQuery(api.quiz.myQuizScore);
+  const isAdmin = useQuery(api.admin.isAdmin);
+  const updateProfile = useMutation(api.profile.updateProfile);
+
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [image, setImage] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [compact, setCompact] = useState(false);
+
+  // Seed the form once the profile query resolves. Adjusting state during
+  // render (rather than in an effect) avoids a cascading second render.
+  const [lastProfile, setLastProfile] = useState(profile);
+  if (profile !== lastProfile) {
+    setLastProfile(profile);
+    setName(profile?.name ?? "");
+    setCity(profile?.city ?? "");
+    setCountry(profile?.country ?? "");
+    setImage(profile?.image ?? "");
+  }
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await updateProfile({ name, city, country, image });
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2500);
+  };
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
 
-  return (
-    <main className="min-h-screen bg-background px-6 py-10 text-foreground">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">
-              Authenticated workspace
-            </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">
-              Welcome{user?.name ? `, ${user.name}` : ""}
-            </h1>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="cursor-pointer gap-2 self-start"
-            onClick={handleSignOut}
-          >
-            <LogOut className="size-4" />
-            Sign out
-          </Button>
-        </header>
+  const displayName = profile?.name || profile?.email?.split("@")[0] || "Resident";
 
-        <Card className="border-border/70 shadow-none">
-          <CardHeader>
-            <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <LayoutDashboard className="size-5" />
-            </div>
-            <CardTitle>Your dashboard is ready</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm leading-6 text-muted-foreground">
-            Replace this starter content with the product&apos;s authenticated
-            experience. The route is protected and sign-in returns here by
-            default.
-          </CardContent>
-        </Card>
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
+          {displayName}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <span className="nb-chip bg-[#F43F5E] text-black">
+              <User className="size-3.5" strokeWidth={3} />
+              Admin
+            </span>
+          )}
+          <span className="nb-chip bg-[#1E293B] text-[#10B981]">
+            <MapPin className="size-3.5" strokeWidth={3} />
+            {profile?.city || "No city set"}
+          </span>
+        </div>
       </div>
-    </main>
+
+      <div className="mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        {/* ------------------------------------------------- main column */}
+        <div className="flex flex-col gap-4">
+          {/* Identity card */}
+          <section className="nb-panel">
+            <div className="flex items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+              <span className="nb-chip bg-[#10B981] text-[#04110C]">
+                <Building2 className="size-3.5" strokeWidth={3} />
+                Resident Profile
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-5 p-5">
+              <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden border-2 border-black bg-[#06B6D4] shadow-[4px_4px_0_0_#000]">
+                {profile?.image ? (
+                  <img
+                    src={profile.image}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <User className="size-9 text-[#03151A]" strokeWidth={2.5} />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-black text-[#F8FAFC]">{displayName}</p>
+                <p className="truncate text-xs font-bold text-[#94A3B8]">
+                  {profile?.email || "—"}
+                </p>
+                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  {[profile?.city, profile?.country].filter(Boolean).join(", ") ||
+                    "Location not set"}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Quiz result */}
+          <section className="nb-panel">
+            <div className="flex flex-wrap items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+              <h2 className="nb-title text-sm">Sustainability Score</h2>
+              <Link
+                to="/quiz"
+                className="nb-btn ml-auto bg-[#FBBF24] px-3 py-1.5 text-black"
+              >
+                <Sparkles className="size-3.5" strokeWidth={3} />
+                {quizScore ? "Retake Quiz" : "Take Quiz"}
+              </Link>
+            </div>
+            <div className="p-5">
+              {quizScore ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {(
+                    [
+                      ["Daily Habits", quizScore.categoryPoints.dailyHabits],
+                      ["Energy Usage", quizScore.categoryPoints.usage],
+                      ["Carbon Footprint", quizScore.categoryPoints.carbonFootprint],
+                    ] as const
+                  ).map(([label, value]) => {
+                    const pct = Math.round((value / 50) * 100);
+                    return (
+                      <div
+                        key={label}
+                        className="border-2 border-black bg-[#0B0F17] p-3"
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
+                          {label}
+                        </p>
+                        <p className="mt-1 text-2xl font-black leading-none tabular-nums text-[#F8FAFC]">
+                          {pct}%
+                        </p>
+                        <div className="mt-2 h-2.5 border-2 border-black bg-[#1E293B]">
+                          <div
+                            className="h-full bg-[#10B981]"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm font-bold text-[#94A3B8]">
+                  You have not taken the 15-question sustainability quiz yet.
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* Shortcuts */}
+          <section className="nb-panel p-4">
+            <h2 className="nb-title mb-3 text-sm">Jump To</h2>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Link to="/" className="nb-btn justify-center bg-[#06B6D4] text-[#03151A]">
+                Dashboard
+              </Link>
+              <Link to="/analytics" className="nb-btn justify-center bg-[#10B981] text-[#04110C]">
+                Analytics
+              </Link>
+              <Link to="/report" className="nb-btn justify-center bg-[#F8FAFC] text-[#04110C]">
+                Report Issue
+              </Link>
+            </div>
+          </section>
+        </div>
+
+        {/* ------------------------------------------------ settings card */}
+        <aside className="flex flex-col gap-4">
+          <section className="nb-panel">
+            <div className="flex items-center gap-3 border-b-2 border-black bg-[#111827] p-4">
+              <Settings className="size-4 text-[#10B981]" strokeWidth={3} />
+              <h2 className="nb-title text-sm">Settings</h2>
+            </div>
+
+            <form onSubmit={handleSave} className="flex flex-col gap-4 p-4">
+              <div>
+                <label
+                  htmlFor="settings-name"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                >
+                  Display Name
+                </label>
+                <input
+                  id="settings-name"
+                  className="nb-field"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="settings-city"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                >
+                  City
+                </label>
+                <input
+                  id="settings-city"
+                  className="nb-field"
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                  placeholder="Mumbai"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="settings-country"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                >
+                  Country
+                </label>
+                <input
+                  id="settings-country"
+                  className="nb-field"
+                  value={country}
+                  onChange={(event) => setCountry(event.target.value)}
+                  placeholder="India"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="settings-image"
+                  className="mb-2 block text-xs font-black uppercase tracking-wider text-[#CBD5E1]"
+                >
+                  Profile Picture URL
+                </label>
+                <input
+                  id="settings-image"
+                  className="nb-field"
+                  value={image}
+                  onChange={(event) => setImage(event.target.value)}
+                  placeholder="https://…"
+                />
+              </div>
+
+              <div className="border-t-2 border-black pt-4">
+                <NbSwitch
+                  label="Compact Data Density"
+                  checked={compact}
+                  onChange={setCompact}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="nb-btn w-full justify-center bg-[#10B981] py-2.5 text-[#04110C]"
+              >
+                {saved ? (
+                  <>
+                    <Check className="size-4" strokeWidth={3} />
+                    Saved
+                  </>
+                ) : (
+                  "Save Settings"
+                )}
+              </button>
+            </form>
+          </section>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="nb-btn w-full justify-center bg-[#F43F5E] py-2.5 text-black"
+          >
+            <LogOut className="size-4" strokeWidth={3} />
+            Sign Out
+          </button>
+        </aside>
+      </div>
+    </div>
   );
 }

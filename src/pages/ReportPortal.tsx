@@ -1,6 +1,9 @@
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/hooks/use-auth";
+import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { ChevronUp, ImagePlus, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Check, ChevronUp, ImagePlus, Send, ShieldCheck, Wrench, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 
 /* --------------------------------------------------------------- config */
 
@@ -50,58 +53,28 @@ const URGENCY_ACTIVE: Record<Urgency, string> = {
 const STATUS_COLORS: Record<CitizenReport["status"], string> = {
   New: "#06B6D4",
   "In Progress": "#FBBF24",
+  "On Review": "#A78BFA",
   Resolved: "#10B981",
 };
 
 /* ----------------------------------------------------------- data types */
 
 interface CitizenReport {
-  id: string;
   ticket: string;
   category: string;
   tag: string;
   tagColor: string;
   district: string;
   description: string;
-  urgency: Urgency;
-  status: "New" | "In Progress" | "Resolved";
+  urgency: string;
+  status: "New" | "In Progress" | "On Review" | "Resolved";
   upvotes: number;
   createdAt: number;
   aiTag: string;
+  reporterEmail: string;
+  resolution?: string;
+  resolvedAt?: number;
 }
-
-const SEED_REPORTS: CitizenReport[] = [
-  {
-    id: "seed-8812",
-    ticket: "#URB-8812",
-    category: "Extreme Heat / Unshaded Stop",
-    tag: "Heat/Shade",
-    tagColor: "#F43F5E",
-    district: "Financial District",
-    description:
-      "Unshaded Bus Stop on 5th Ave during 40°C heat wave",
-    urgency: "High",
-    status: "In Progress",
-    upvotes: 42,
-    createdAt: Date.now() - 3 * 60 * 60 * 1000,
-    aiTag: "[AI Priority Tag: High - Routed to Parks & Transport Dept]",
-  },
-  {
-    id: "seed-8790",
-    ticket: "#URB-8790",
-    category: "Pothole / Bike Lane Hazard",
-    tag: "Bike Lane",
-    tagColor: "#06B6D4",
-    district: "West Tech Corridor",
-    description:
-      "Debris blocking Commuter E-Bike Corridor near Metro Exit",
-    urgency: "Medium",
-    status: "Resolved",
-    upvotes: 18,
-    createdAt: Date.now() - 26 * 60 * 60 * 1000,
-    aiTag: "[AI Priority Tag: Medium - Routed to Roads & Mobility Dept]",
-  },
-];
 
 function timeAgo(timestamp: number): string {
   const minutes = Math.floor((Date.now() - timestamp) / 60000);
@@ -115,8 +88,17 @@ function timeAgo(timestamp: number): string {
 /* ------------------------------------------------------------------ page */
 
 export default function ReportPortal() {
-  const [reports, setReports] = useState<CitizenReport[]>(SEED_REPORTS);
+  const { isAuthenticated } = useAuth();
+
+  const liveIssues = useQuery(api.admin.listIssues);
+  const isAdmin = useQuery(api.admin.isAdmin);
+  const submitIssue = useMutation(api.admin.submitIssue);
+  const upvoteIssue = useMutation(api.admin.upvoteIssue);
+  const resolveIssue = useMutation(api.admin.resolveIssue);
+
   const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
+  const [resolvingTicket, setResolvingTicket] = useState<string | null>(null);
+  const [resolutionNote, setResolutionNote] = useState("");
 
   // Form state
   const [category, setCategory] = useState("");
@@ -130,8 +112,9 @@ export default function ReportPortal() {
     ticket: string;
     aiTag: string;
   } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const nextTicket = useRef(8942);
+  const reports: CitizenReport[] = liveIssues ?? [];
 
   // Revoke object URLs when the preview changes or the page unmounts.
   useEffect(() => {
@@ -157,49 +140,59 @@ export default function ReportPortal() {
     setPreviewUrl(null);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const match = CATEGORIES.find((entry) => entry.value === category);
     if (!match || !district || description.trim().length < 10) return;
 
-    const ticket = `#URB-${nextTicket.current}`;
-    nextTicket.current += 1;
     const aiTag = `[AI Priority Tag: ${urgency} - Routed to ${match.dept}]`;
-
-    const report: CitizenReport = {
-      id: ticket,
-      ticket,
-      category: match.value,
-      tag: match.tag,
-      tagColor: match.color,
-      district,
-      description: description.trim(),
-      urgency,
-      status: "New",
-      upvotes: 0,
-      createdAt: Date.now(),
-      aiTag,
-    };
-
-    setReports((previous) => [report, ...previous]);
-    setSuccess({ ticket, aiTag });
-    clearForm();
+    setSubmitting(true);
+    try {
+      const result = await submitIssue({
+        category: match.value,
+        tag: match.tag,
+        tagColor: match.color,
+        district,
+        description: description.trim(),
+        urgency,
+        aiTag,
+      });
+      setSuccess({ ticket: result.ticket, aiTag });
+      clearForm();
+    } catch (error) {
+      setSuccess(null);
+      console.error("Report submission failed:", error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleUpvote = (id: string) => {
-    setReports((previous) =>
-      previous.map((report) =>
-        report.id === id
-          ? { ...report, upvotes: report.upvotes + 1 }
-          : report,
-      ),
-    );
-    setUpvotedIds((previous) => {
-      const next = new Set(previous);
-      next.add(id);
-      return next;
-    });
+  const handleUpvote = async (ticket: string) => {
+    if (upvotedIds.has(ticket)) return;
+    setUpvotedIds((previous) => new Set(previous).add(ticket));
+    try {
+      await upvoteIssue({ ticket });
+    } catch (error) {
+      // Roll the optimistic highlight back if the write failed.
+      setUpvotedIds((previous) => {
+        const next = new Set(previous);
+        next.delete(ticket);
+        return next;
+      });
+      console.error("Upvote failed:", error);
+    }
+  };
+
+  const handleResolve = async (ticket: string) => {
+    if (resolutionNote.trim().length < 4) return;
+    try {
+      await resolveIssue({ ticket, resolution: resolutionNote.trim() });
+      setResolvingTicket(null);
+      setResolutionNote("");
+    } catch (error) {
+      console.error("Resolve failed:", error);
+    }
   };
 
   return (
@@ -208,9 +201,17 @@ export default function ReportPortal() {
         <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
           Citizen Engagement &amp; Grievance Portal
         </h1>
-        <span className="nb-chip bg-[#1E293B] text-[#06B6D4]">
-          {reports.length} Tickets Live
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <span className="nb-chip bg-[#F43F5E] text-black">
+              <ShieldCheck className="size-3.5" strokeWidth={3} />
+              Admin Mode
+            </span>
+          )}
+          <span className="nb-chip bg-[#1E293B] text-[#06B6D4]">
+            {reports.length} Tickets Live
+          </span>
+        </div>
       </div>
 
       {/* Success alert */}
@@ -400,10 +401,15 @@ export default function ReportPortal() {
 
             <button
               type="submit"
-              className="nb-btn mt-1 w-full bg-[#10B981] py-3 text-[#04110C]"
+              disabled={submitting}
+              className="nb-btn mt-1 w-full bg-[#10B981] py-3 text-[#04110C] disabled:cursor-not-allowed disabled:bg-[#1E293B] disabled:text-[#64748B]"
             >
               <Send className="size-4" strokeWidth={3} />
-              Submit Citizen Report
+              {submitting
+                ? "Submitting…"
+                : isAuthenticated
+                  ? "Submit Citizen Report"
+                  : "Sign In To Submit"}
             </button>
           </div>
         </form>
@@ -421,9 +427,14 @@ export default function ReportPortal() {
           </div>
 
           <div className="flex flex-col gap-3 p-4">
+            {reports.length === 0 && (
+              <p className="border-2 border-dashed border-black bg-[#111827] p-6 text-center text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                No tickets filed yet. Be the first to report an issue.
+              </p>
+            )}
             {reports.map((report) => (
               <motion.article
-                key={report.id}
+                key={report.ticket}
                 layout
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -458,6 +469,15 @@ export default function ReportPortal() {
                   {report.description}
                 </p>
 
+                {report.resolution && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-2 border-black bg-[#10B981] p-2.5">
+                    <Check className="size-4 shrink-0 text-[#04110C]" strokeWidth={4} />
+                    <span className="text-xs font-bold leading-relaxed text-[#04110C]">
+                      {report.resolution}
+                    </span>
+                  </div>
+                )}
+
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t-2 border-black pt-3">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">
                     {report.district}
@@ -467,19 +487,64 @@ export default function ReportPortal() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleUpvote(report.id)}
+                    onClick={() => handleUpvote(report.ticket)}
                     aria-label={`Upvote ${report.ticket}`}
                     className={[
-                      "nb-btn ml-auto px-3 py-1.5 text-xs tabular-nums",
-                      upvotedIds.has(report.id)
+                      "nb-btn px-3 py-1.5 text-xs tabular-nums",
+                      upvotedIds.has(report.ticket)
                         ? "bg-[#10B981] text-[#04110C]"
-                        : "bg-[#1E293B] text-[#E2E8F0]",
+                        : "ml-auto bg-[#1E293B] text-[#E2E8F0]",
                     ].join(" ")}
                   >
                     <ChevronUp className="size-4" strokeWidth={3} />
                     {report.upvotes}
                   </button>
                 </div>
+
+                {isAdmin && report.status !== "Resolved" && (
+                  <div className="mt-3 border-t-2 border-black pt-3">
+                    {resolvingTicket === report.ticket ? (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          className="nb-field"
+                          value={resolutionNote}
+                          onChange={(event) => setResolutionNote(event.target.value)}
+                          placeholder="Describe the resolution…"
+                          aria-label={`Resolution for ${report.ticket}`}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleResolve(report.ticket)}
+                            className="nb-btn flex-1 justify-center bg-[#10B981] py-2 text-[#04110C]"
+                          >
+                            <Check className="size-4" strokeWidth={3} />
+                            Confirm Resolve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResolvingTicket(null);
+                              setResolutionNote("");
+                            }}
+                            className="nb-btn justify-center bg-[#1E293B] px-3 py-2 text-[#CBD5E1]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setResolvingTicket(report.ticket)}
+                        className="nb-btn w-full justify-center bg-[#F43F5E] py-2 text-black"
+                      >
+                        <Wrench className="size-4" strokeWidth={3} />
+                        Resolve Ticket
+                      </button>
+                    )}
+                  </div>
+                )}
               </motion.article>
             ))}
           </div>

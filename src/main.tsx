@@ -14,6 +14,7 @@ import "./index.css";
 const CommandCenter = lazy(() => import("./pages/CommandCenter.tsx"));
 const Analytics = lazy(() => import("./pages/Analytics.tsx"));
 const ReportPortal = lazy(() => import("./pages/ReportPortal.tsx"));
+const QuizPage = lazy(() => import("./pages/QuizPage.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -126,6 +127,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/" element={<CommandCenter />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/report" element={<ReportPortal />} />
+                <Route path="/quiz" element={<QuizPage />} />
               </Route>
               <Route
                 path="/auth"

@@ -1,4 +1,7 @@
 import { NbSlider, NbSwitch } from "@/components/NbControls";
+import ProjectionChart from "@/components/ProjectionChart";
+import { useAuth } from "@/hooks/use-auth";
+import { useCityPopulation } from "@/hooks/use-city-population";
 import { motion } from "framer-motion";
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -126,6 +129,10 @@ function ChartPanel({
 /* ------------------------------------------------------------------ page */
 
 export default function Analytics() {
+  const { user } = useAuth();
+  const city = user?.city?.trim() || "Mumbai";
+  const { population, estimated } = useCityPopulation(city);
+
   const [canopy, setCanopy] = useState(12);
   const [toll, setToll] = useState(4);
   const [misting, setMisting] = useState(true);
@@ -145,7 +152,7 @@ export default function Analytics() {
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-black uppercase tracking-tight text-[#F8FAFC] md:text-3xl">
-          Predictive Urban Analytics
+          Urban Analytics
         </h1>
         <span className="nb-chip bg-[#1E293B] text-[#94A3B8]">
           Scenario Engine · Q3 2026
@@ -227,7 +234,7 @@ export default function Analytics() {
 
         {/* Chart 2 */}
         <ChartPanel
-          title="Commuter Modal Split & Carbon Displacement"
+          title="Commuter Modal & Carbon Displacement"
           legend={
             <>
               <LegendSwatch color="#06B6D4" label="Public Bus" />
@@ -432,6 +439,21 @@ export default function Analytics() {
           </div>
         </div>
       </motion.section>
+
+      {/* 10-year projection derived from the simulator controls above */}
+      <ProjectionChart
+        canopy={canopy}
+        toll={toll}
+        misting={misting}
+        population={population}
+        city={city}
+      />
+
+      {estimated && population > 0 && (
+        <p className="text-center text-[10px] font-black uppercase tracking-widest text-[#64748B]">
+          Population for {city} is an offline estimate
+        </p>
+      )}
     </div>
   );
 }
