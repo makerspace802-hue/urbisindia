@@ -1,65 +1,77 @@
 import CensusCharts from "@/components/CensusCharts";
 import { api } from "@/convex/_generated/api";
+import { changeRows, formatCensusValue, type CensusIndicator } from "@/lib/census";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { Megaphone } from "lucide-react";
 import { Link } from "react-router";
 
-interface Kpi {
-  title: string;
-  value: string;
-  note?: string;
-  change: string;
-  changeClass: string;
-  badge: string;
-  badgeClass: string;
-  spark: number[];
-  sparkColor: string;
-}
+/**
+ * The four indicators promoted to the top of the dashboard.
+ *
+ * They are pulled out of the same table the charts further down the page are
+ * drawn from, so a card and its chart can never disagree. The previous four
+ * cards carried invented traffic, heat-island, canopy and EV figures that no
+ * chart in this dashboard was built on.
+ */
+const KPI_KEYS = ["population", "households", "literacy", "urban"] as const;
 
-const KPIS: Kpi[] = [
-  {
-    title: "Traffic Congestion Index",
-    value: "32%",
-    change: "↓ 14% vs avg",
-    changeClass: "text-[#10B981]",
-    badge: "Low Flow Risk",
-    badgeClass: "bg-[#06B6D4] text-[#03151A]",
-    spark: [48, 46, 47, 44, 43, 44, 41, 39, 40, 37, 36, 34, 35, 33, 32, 32],
-    sparkColor: "#06B6D4",
-  },
-  {
-    title: "Heat Island Peak Temp",
-    value: "38.4°C",
-    change: "↑ 2.1°C concrete zones",
-    changeClass: "text-[#F43F5E]",
-    badge: "Thermal Advisory Zone 3",
-    badgeClass: "bg-[#F43F5E] text-black",
-    spark: [33.2, 33.6, 34.1, 34, 34.8, 35.4, 35.9, 36.4, 36.2, 37, 37.4, 37.8, 38.1, 38, 38.3, 38.4],
-    sparkColor: "#F43F5E",
-  },
-  {
-    title: "Urban Canopy Index",
-    value: "28.5%",
-    change: "+1.2% target YTD",
-    changeClass: "text-[#10B981]",
-    badge: "142k Trees Active",
-    badgeClass: "bg-[#10B981] text-[#04110C]",
-    spark: [26.9, 27, 27.1, 27.3, 27.4, 27.5, 27.7, 27.8, 27.9, 28, 28.1, 28.2, 28.3, 28.4, 28.4, 28.5],
-    sparkColor: "#10B981",
-  },
-  {
-    title: "EV & Micro-Mobility Share",
-    value: "44.8%",
-    note: "of daily trips",
-    change: "↑ 6.4% vs Q1",
-    changeClass: "text-[#10B981]",
-    badge: "High Adoption",
-    badgeClass: "bg-[#10B981] text-[#04110C]",
-    spark: [38.4, 38.9, 39.6, 40.1, 40, 40.9, 41.4, 41.9, 42.3, 42.1, 42.9, 43.4, 43.8, 44.2, 44.5, 44.8],
-    sparkColor: "#10B981",
-  },
-];
+/** Sub-label under each headline value, for the context the number lacks. */
+const KPI_NOTES: Record<(typeof KPI_KEYS)[number], string> = {
+  population: "people · census 2011",
+  households: "4.8 people per household",
+  literacy: "aged 7 and above",
+  urban: "live in a statutory town",
+};
+
+/** Decade movement colours, matching the change chart in CensusCharts. */
+const DIRECTION_COLOUR = {
+  up: "#10B981",
+  down: "#F43F5E",
+  flat: "#64748B",
+} as const;
+
+const DIRECTION_CHIP = {
+  up: "bg-[#10B981] text-[#04110C]",
+  down: "bg-[#F43F5E] text-black",
+  flat: "bg-[#64748B] text-white",
+} as const;
+
+/** Bar colours for the 2001 / 2011 pair, matching the radar legend. */
+const Y2001 = "#06B6D4";
+const Y2011 = "#10B981";
+
+/** Unit suffix worth printing next to a value. */
+const unitSuffix = (unit: string) => (unit === "%" ? "%" : "");
+
+/**
+ * Same builder the change chart uses, so the badge on each card is literally
+ * the bar height drawn below it.
+ */
+const CHANGE_BY_KEY = new Map(changeRows().map((row) => [row.key, row]));
+
+const KPIS = KPI_KEYS.map((key) => {
+  const row = CHANGE_BY_KEY.get(key);
+  if (!row) throw new Error(`Unknown census indicator: ${key}`);
+  const suffix = unitSuffix(row.unit);
+  return {
+    key,
+    row,
+    title: row.label,
+    note: KPI_NOTES[key],
+    value: `${formatCensusValue(row.y2011, row.unit)}${suffix}`,
+    baseline: `${formatCensusValue(row.y2001, row.unit)}${suffix}`,
+    badge: `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(1)}% in decade`,
+    // A rate moves in points, not percent — "9.2%" would read as a relative
+    // change and understate it, so rates print as points.
+    absolute:
+      row.unit === "%"
+        ? `${row.absolute >= 0 ? "+" : ""}${row.absolute.toFixed(2)} pts`
+        : `${row.absolute >= 0 ? "+" : ""}${formatCensusValue(row.absolute, row.unit)} more`,
+    colour: DIRECTION_COLOUR[row.direction],
+    chip: DIRECTION_CHIP[row.direction],
+  };
+});
 
 /** Category colours for the live community feed on the dashboard. */
 const TAG_COLORS: Record<string, string> = {
@@ -69,34 +81,74 @@ const TAG_COLORS: Record<string, string> = {
   "Tree Planting": "#10B981",
 };
 
-function Sparkline({ data, color }: { data: number[]; color: string }) {
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const points = data
-    .map((value, index) => {
-      const x = (index / (data.length - 1)) * 100;
-      const y = 30 - ((value - min) / range) * 26;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
+/**
+ * The 2001 and 2011 figures as two bars on the indicator's own natural domain
+ * — the same scale the "Profile Shape" radar below uses. This replaces an
+ * invented 16-point sparkline with the only two data points the card actually
+ * has, and makes the gap between them the real decadal gap.
+ */
+function DecadeBars({ row, colour }: { row: CensusIndicator; colour: string }) {
+  const [low, high] = row.domain;
+  const span = high - low || 1;
+  const bar = (value: number) => Math.max(2, ((value - low) / span) * 26);
+  const h2001 = bar(row.y2001);
+  const h2011 = bar(row.y2011);
+  const baseline = 32;
+  const top2001 = baseline - h2001;
+  const top2011 = baseline - h2011;
 
   return (
     <svg
-      viewBox="0 0 100 32"
-      preserveAspectRatio="none"
-      className="h-9 w-24 shrink-0 sm:w-28"
-      aria-hidden="true"
+      viewBox="0 0 96 44"
+      className="h-11 w-20 shrink-0 sm:w-24"
+      role="img"
+      aria-label={`${row.label}: ${formatCensusValue(row.y2001, row.unit)} in 2001, ${formatCensusValue(row.y2011, row.unit)} in 2011`}
     >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
+      <line
+        x1="6"
+        y1={baseline}
+        x2="90"
+        y2={baseline}
+        stroke="var(--nb-ink)"
+        strokeWidth="2"
+      />
+      {/*
+        A decade is a small move on most of these natural ranges — the urban
+        share shifts by about a pixel. The connector is drawn behind the bars
+        so only the gap between them shows the line, which keeps the direction
+        of travel readable even where the two heights look identical.
+      */}
+      <line
+        x1="37"
+        y1={top2001}
+        x2="65"
+        y2={top2011}
+        stroke={colour}
         strokeWidth="3"
         strokeLinecap="square"
-        strokeLinejoin="miter"
-        vectorEffect="non-scaling-stroke"
       />
+      <rect x="26" y={top2001} width="22" height={h2001} fill={Y2001} />
+      <rect x="54" y={top2011} width="22" height={h2011} fill={Y2011} />
+      <text
+        x="37"
+        y="42"
+        textAnchor="middle"
+        fontSize="8"
+        fontWeight="900"
+        fill="#64748B"
+      >
+        01
+      </text>
+      <text
+        x="65"
+        y="42"
+        textAnchor="middle"
+        fontSize="8"
+        fontWeight="900"
+        fill="#64748B"
+      >
+        11
+      </text>
     </svg>
   );
 }
@@ -121,11 +173,20 @@ export default function CommandCenter() {
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">{today}</span>
       </div>
 
-      {/* KPI grid */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Census baseline — the same table the charts further down are drawn from */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="nb-title text-sm md:text-base">
+          Census Baseline
+        </h2>
+        <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+          Census Of India · 2001 → 2011
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {KPIS.map((kpi, index) => (
           <motion.article
-            key={kpi.title}
+            key={kpi.key}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: index * 0.05 }}
@@ -136,29 +197,31 @@ export default function CommandCenter() {
                 {kpi.title}
               </h2>
               <span
-                className={`nb-chip whitespace-normal text-right ${kpi.badgeClass}`}
+                className={`nb-chip whitespace-normal text-right ${kpi.chip}`}
               >
                 {kpi.badge}
               </span>
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-4xl font-black leading-none tabular-nums text-[var(--nb-text)]">
+                <p className="text-3xl font-black leading-none tabular-nums text-[var(--nb-text)]">
                   {kpi.value}
                 </p>
-                {kpi.note && (
-                  <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
-                    {kpi.note}
-                  </p>
-                )}
+                <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
+                  {kpi.note}
+                </p>
               </div>
-              <Sparkline data={kpi.spark} color={kpi.sparkColor} />
+              <DecadeBars row={kpi.row} colour={kpi.colour} />
             </div>
-            <div className="mt-4 border-t-2 border-[var(--nb-ink)] pt-2.5">
+            <div className="mt-4 flex items-center justify-between gap-2 border-t-2 border-[var(--nb-ink)] pt-2.5">
+              <span className="text-xs font-black tabular-nums text-[var(--nb-text-dim)]">
+                2001 · {kpi.baseline}
+              </span>
               <span
-                className={`text-xs font-black tabular-nums ${kpi.changeClass}`}
+                className="whitespace-nowrap text-xs font-black tabular-nums"
+                style={{ color: kpi.colour }}
               >
-                {kpi.change}
+                {kpi.absolute}
               </span>
             </div>
           </motion.article>
