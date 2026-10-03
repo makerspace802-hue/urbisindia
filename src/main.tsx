@@ -24,7 +24,9 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 function RouteLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">gooning... </div>
+      <div className="text-center font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+        <span className="nb-chip bg-[var(--nb-surface-2)]">Indexing census grids</span>
+      </div>
     </div>
   );
 }

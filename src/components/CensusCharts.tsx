@@ -1,3 +1,4 @@
+import { RetroMarquee, RetroSwitcher } from "@/components/Retro";
 import { censusName, matchPlace, PLACE_FALLBACK } from "@/lib/geo";
 import {
   COMMUTE,
@@ -420,22 +421,12 @@ export default function CensusCharts() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-0">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setView(v.id)}
-              className={`nb-btn text-xs ${
-                view === v.id
-                  ? "bg-[#10B981] text-[#04110C]"
-                  : "bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]"
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <RetroSwitcher
+          options={VIEWS.map((v) => ({ id: v.id, label: v.label }))}
+          value={view}
+          onChange={setView}
+          label="Census views"
+        />
         <div className="flex flex-wrap items-center gap-2">
           <span className="nb-chip bg-[#06B6D4] text-[#03151A]">Showing: {label}</span>
           <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
@@ -449,6 +440,19 @@ export default function CensusCharts() {
           Location declined — showing all India. Allow location to see your own state.
         </p>
       )}
+
+      <div className="mb-4">
+        <RetroMarquee
+          items={[
+            `Census of India 2011 · ${STATE_DECADAL.length} states and union territories`,
+            `Latest census recorded ${(INDIA_2011.population / 1_000_000).toFixed(1)} million people`,
+            `${(INDIA_2011.households / 1_000_000).toFixed(1)} million households · ${INDIA_2011.towns.toLocaleString("en-IN")} towns`,
+            `${(INDIA_SPATIAL.inhabitedVillages).toLocaleString("en-IN")} inhabited villages · ${(INDIA_SPATIAL.uninhabitedVillages).toLocaleString("en-IN")} standing empty`,
+            `Urban share ${INDIA_2011.urbanSharePercent}% · average density ${INDIA_2011.density} per km²`,
+            `Scheduled Tribe ${INDIA_2011.stSharePercent}% · Scheduled Caste ${INDIA_2011.scSharePercent}% of the population`,
+          ]}
+        />
+      </div>
 
       <motion.div
         key={`${view}-${label}`}

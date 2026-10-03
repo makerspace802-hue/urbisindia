@@ -268,3 +268,117 @@
 *::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
+
+/* ==========================================================================
+   Retro motion kit
+   Discrete, mechanical movement to match the hard-edged panels. Every rule
+   here is disabled under prefers-reduced-motion rather than merely slowed.
+   ========================================================================== */
+@layer components {
+  /* Block slide & swap — the highlight crosses between options in visible
+     steps rather than gliding, which is what keeps it reading as mechanical. */
+  .nb-tab-rail {
+    position: relative;
+    display: inline-flex;
+    border: 2px solid var(--nb-ink);
+    background: var(--nb-surface-2);
+    overflow: hidden;
+  }
+  .nb-tab-highlight {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--nb-tab-w, 0px);
+    background: #10b981;
+    transform: translateX(var(--nb-tab-x, 0px));
+    transition: transform 120ms steps(4, end);
+    pointer-events: none;
+  }
+  .nb-tab {
+    position: relative;
+    z-index: 1;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--nb-text-2);
+  }
+  .nb-tab[aria-selected="true"] {
+    color: #04110c;
+  }
+
+  /* Status marquee — one long pass, then the duplicated copy takes over so the
+     loop has no visible seam. */
+  .nb-marquee {
+    overflow: hidden;
+    border-top: 2px solid var(--nb-ink);
+    border-bottom: 2px solid var(--nb-ink);
+    background: var(--nb-surface-2);
+  }
+  .nb-marquee__track {
+    display: inline-flex;
+    width: max-content;
+    white-space: nowrap;
+    animation: nb-marquee-scroll 30s linear infinite;
+  }
+  .nb-marquee:hover .nb-marquee__track {
+    animation-play-state: paused;
+  }
+  @keyframes nb-marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* Slot-machine flip — the outgoing digit leaves upward inside a hard clip,
+     the replacement arrives from below. */
+  .nb-slot {
+    display: block;
+    overflow: hidden;
+  }
+  .nb-slot__inner {
+    display: block;
+    animation: nb-slot-in 150ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  @keyframes nb-slot-in {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  /* Section headings ease up into place as they are scrolled to. */
+  .nb-rise {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 380ms ease-out,
+      transform 380ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  .nb-rise.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-marquee__track,
+  .nb-slot__inner {
+    animation: none !important;
+  }
+  .nb-tab-highlight {
+    transition: none !important;
+  }
+  .nb-rise {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

@@ -24,6 +24,21 @@ export function normaliseEmail(email: string | undefined | null): string {
 }
 
 /**
+ * Addresses that are always admin, without a row in `adminGrants`.
+ *
+ * This is the recovery path for a published deployment: every other grant is a
+ * database row, and if that row is ever lost or the table is cleared there is
+ * no signed-in admin left to re-grant it. Seeding the owner's address in code
+ * means access survives that. To remove the owner, delete the entry here and
+ * deploy — that is the only way to revoke it.
+ */
+const SEED_ADMIN_EMAILS = ["makerspace802@gmail.com"];
+
+function isSeedAdmin(key: string): boolean {
+  return SEED_ADMIN_EMAILS.some((e) => e.toLowerCase() === key);
+}
+
+/**
  * Is this email an admin?
  *
  * Reads the `adminGrants` table by index, so it is a single indexed lookup and
@@ -36,6 +51,7 @@ export async function isAdminEmail(
 ): Promise<boolean> {
   const key = normaliseEmail(email);
   if (!key) return false;
+  if (isSeedAdmin(key)) return true;
   const grant = await ctx.db
     .query("adminGrants")
     .withIndex("by_email", (q) => q.eq("email", key))
@@ -85,9 +101,21 @@ export const listAdmins = query({
   handler: async (ctx) => {
     await requireAdminEmail(ctx);
     const grants = await ctx.db.query("adminGrants").collect();
-    return grants
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map((g) => ({ email: g.email, createdAt: g.createdAt, grantedBy: g.grantedBy }));
+    const rows = grants.map((g) => ({
+      email: g.email,
+      createdAt: g.createdAt,
+      grantedBy: g.grantedBy,
+      seeded: false,
+    }));
+    // Show the seeded owner even though there is no row for them, otherwise
+    // the admin panel would disagree with what `isAdmin` actually allows.
+    for (const email of SEED_ADMIN_EMAILS) {
+      const normalised = email.toLowerCase();
+      if (!rows.some((r) => normaliseEmail(r.email) === normalised)) {
+        rows.push({ email, createdAt: 0, grantedBy: "seed", seeded: true });
+      }
+    }
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 

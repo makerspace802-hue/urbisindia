@@ -1,4 +1,5 @@
 import CensusCharts from "@/components/CensusCharts";
+import { Reveal, SlotValue } from "@/components/Retro";
 import { api } from "@/convex/_generated/api";
 import {
   CENTURY_MULTIPLE,
@@ -191,7 +192,8 @@ export default function CommandCenter() {
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Reveal>
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARDS.map((card, index) => (
           <motion.article
             key={card.key}
@@ -212,9 +214,10 @@ export default function CommandCenter() {
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-3xl font-black leading-none tabular-nums text-[var(--nb-text)]">
-                  {card.value}
-                </p>
+                <SlotValue
+                  value={card.value}
+                  className="block text-3xl font-black leading-none tabular-nums text-[var(--nb-text)]"
+                />
                 <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
                   {card.note}
                 </p>
@@ -234,7 +237,8 @@ export default function CommandCenter() {
             </div>
           </motion.article>
         ))}
-      </div>
+        </div>
+      </Reveal>
 
       {/* Live citizen feed — real submissions only, no placeholder rows */}
       <section className="mt-6">

@@ -1,23 +1,16 @@
 import { useSettings } from "@/components/SettingsProvider";
-import { Cloud, CloudRain, CloudSun, Sun, Wind, X } from "lucide-react";
+import {
+  CONDITION,
+  detailFor,
+  FALLBACK_POINT,
+  fetchWeather,
+  type LiveWeather,
+} from "@/lib/weather";
+import { RefreshCw, Wind, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const POS_KEY = "urbis.widgetPos";
-
-type Condition = "clear" | "partly" | "cloudy" | "rain";
-
-const CONDITION: Record<
-  Condition,
-  { label: string; temp: number; detail: string; Icon: typeof Sun }
-> = {
-  clear: { label: "Clear", temp: 37, detail: "Low humidity · UV index 9", Icon: Sun },
-  partly: { label: "Partly Cloudy", temp: 33, detail: "Breezy · UV index 6", Icon: CloudSun },
-  cloudy: { label: "Overcast", temp: 28, detail: "Humid · Light haze", Icon: Cloud },
-  rain: { label: "Rain", temp: 24, detail: "Steady rain · Wet roads", Icon: CloudRain },
-};
-
-const ORDER: Condition[] = ["clear", "partly", "cloudy", "rain"];
 
 function readPosition() {
   if (typeof window === "undefined") return { x: 16, y: 96 };
@@ -88,8 +81,60 @@ export default function ClockWeatherWidget() {
   const [now, setNow] = useState(() => new Date());
   const [expanded, setExpanded] = useState(false);
   const [pos, setPos] = useState(readPosition);
-  const [condition, setCondition] = useState<Condition>("clear");
+  const [live, setLive] = useState<LiveWeather | null>(null);
+  const [place, setPlace] = useState(FALLBACK_POINT.label);
+  const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+
+  /**
+   * Weather is read, never chosen.
+   *
+   * Geolocation is preferred; when it is refused or unavailable the widget falls
+   * back to a fixed real location rather than inventing a reading. The manual
+   * condition picker that used to sit here let the displayed state disagree with
+   * the world, so it is gone.
+   */
+  const load = useCallback(async () => {
+    setBusy(true);
+    let point = { ...FALLBACK_POINT, label: FALLBACK_POINT.label };
+    if ("geolocation" in navigator) {
+      const fix = await new Promise<GeolocationPosition | null>((resolve) => {
+        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 15 * 60_000,
+        });
+      });
+      if (fix) {
+        point = {
+          lat: fix.coords.latitude,
+          lon: fix.coords.longitude,
+          label: "Your location",
+        };
+      }
+    }
+    try {
+      const reading = await fetchWeather(point.lat, point.lon);
+      setLive(reading);
+      setPlace(point.label);
+    } catch {
+      // Leave the last good reading on screen rather than blanking the widget.
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // The first fetch is deferred to a macrotask so the effect body itself never
+    // updates state. Calling `load()` directly would set `busy` synchronously
+    // during the effect, which cascades an extra render before anything is known.
+    const initial = setTimeout(() => void load(), 0);
+    const id = setInterval(() => void load(), 15 * 60_000);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(id);
+    };
+  }, [load]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -127,7 +172,8 @@ export default function ClockWeatherWidget() {
     dragRef.current = null;
   };
 
-  const weather = CONDITION[condition];
+  const condition = live?.condition ?? null;
+  const weather = CONDITION[condition ?? "partly"];
   const { Icon } = weather;
   const time = now.toLocaleTimeString("en-GB", { hour12: false });
   const date = now.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
@@ -168,7 +214,7 @@ export default function ClockWeatherWidget() {
 
         <span className="nb-chip bg-[#FBBF24] text-black">
           <Icon className="size-3.5" strokeWidth={3} />
-          {weather.temp}°C
+          {live ? `${Math.round(live.tempC)}°C` : busy ? "…" : "--°C"}
         </span>
       </div>
 
@@ -230,26 +276,23 @@ export default function ClockWeatherWidget() {
 
             <p className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--nb-text-muted)]">
               <Wind className="size-3.5" strokeWidth={3} />
-              {weather.detail}
+              {live ? detailFor(live) : busy ? "Reading…" : "No reading yet"}
             </p>
 
-            <div className="mt-3 flex flex-wrap gap-1.5 border-t-2 border-[var(--nb-ink)] pt-3">
-              {ORDER.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setCondition(option)}
-                  aria-pressed={condition === option}
-                  className={[
-                    "nb-chip",
-                    condition === option
-                      ? "bg-[#10B981] text-[#04110C]"
-                      : "bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]",
-                  ].join(" ")}
-                >
-                  {CONDITION[option].label}
-                </button>
-              ))}
+            <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-[var(--nb-ink)] pt-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
+                Live · {place}
+              </span>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={busy}
+                aria-label="Refresh weather"
+                className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
+              >
+                <RefreshCw className={`size-3 ${busy ? "animate-spin" : ""}`} strokeWidth={3} />
+                Refresh
+              </button>
             </div>
           </motion.div>
         )}
