@@ -113,10 +113,13 @@ export const CENSUS_INDICATORS: CensusIndicator[] = [
     label: "Households",
     short: "Households",
     y2001: 188_923_000,
-    y2011: 253_651_000,
+    y2011: 249_501_663,
     unit: "households",
     domain: [0, 300_000_000],
-    note: "Published Census headline. Household size fell from 5.4 to 4.8.",
+    // 2011 corrected against data/data-4.csv (No_HH) and data/data-2.csv (A-1);
+    // this figure previously read 253,651,000, about 4.1 million too high. The
+    // 2001 value is NOT in the uploaded tables and remains unverified.
+    note: "Published Census headline. 2011 verified against the Census 2011 tables; 2001 not covered by them.",
   },
   {
     key: "sc",
@@ -133,10 +136,15 @@ export const CENSUS_INDICATORS: CensusIndicator[] = [
     label: "Scheduled Tribe Share",
     short: "ST Share",
     y2001: 1.1,
-    y2011: 0.8,
+    y2011: 8.63,
     unit: "%",
-    domain: [0, 5],
-    note: "Published Census headline, down 0.3 points.",
+    domain: [0, 12],
+    // 2011 corrected against data/data-4.csv: P_ST 104,545,716 of 1,210,854,977
+    // is 8.63%. This figure previously read 0.8% — wrong by roughly 10x, which
+    // would have drawn a bar a tenth of its true length. The 2001 value is NOT
+    // in the uploaded tables and is almost certainly wrong on the same pattern;
+    // it is flagged here rather than silently "fixed" from an unverified number.
+    note: "2011 verified against the Census 2011 tables. The 2001 figure is unverified and likely wrong — treat with caution.",
   },
 ];
 

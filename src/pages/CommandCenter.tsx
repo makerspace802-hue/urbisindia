@@ -1,77 +1,104 @@
 import CensusCharts from "@/components/CensusCharts";
 import { api } from "@/convex/_generated/api";
-import { changeRows, formatCensusValue, type CensusIndicator } from "@/lib/census";
+import {
+  CENTURY_MULTIPLE,
+  FIRST_CENSUS_YEAR,
+  INDIA_DECADAL,
+  INDIA_2011,
+  LAST_CENSUS_YEAR,
+  LATEST_DECADAL,
+  OPENING_CENSUS,
+  PEAK_DECADAL,
+} from "@/lib/censusData";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { Megaphone } from "lucide-react";
 import { Link } from "react-router";
 
+/** Compact population formatting for the card values. */
+const compact = (v: number) =>
+  v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v.toLocaleString("en-IN");
+
+const TONES = {
+  cyan: "bg-[#06B6D4] text-[#03151A]",
+  green: "bg-[#10B981] text-[#04110C]",
+  amber: "bg-[#FBBF24] text-[#1A1400]",
+  slate: "bg-[#64748B] text-white",
+} as const;
+
+interface Card {
+  key: string;
+  title: string;
+  value: string;
+  note: string;
+  badge: string;
+  tone: keyof typeof TONES;
+  /** Census year this card is about — the point marked on the century line. */
+  year: number;
+  footLeft: string;
+  footRight: string;
+  accent: string;
+}
+
 /**
- * The four indicators promoted to the top of the dashboard.
+ * Four readings taken from across the whole series rather than four numbers
+ * off its last column.
  *
- * They are pulled out of the same table the charts further down the page are
- * drawn from, so a card and its chart can never disagree. The previous four
- * cards carried invented traffic, heat-island, canopy and EV figures that no
- * chart in this dashboard was built on.
+ * Every figure is read from `censusData.ts`, which is generated from
+ * `data/data-1.csv`, so nothing here is typed by hand. The previous four
+ * cards sat entirely on 2011 and shared nothing with the century of data the
+ * dashboard now carries.
  */
-const KPI_KEYS = ["population", "households", "literacy", "urban"] as const;
-
-/** Sub-label under each headline value, for the context the number lacks. */
-const KPI_NOTES: Record<(typeof KPI_KEYS)[number], string> = {
-  population: "people · census 2011",
-  households: "4.8 people per household",
-  literacy: "aged 7 and above",
-  urban: "live in a statutory town",
-};
-
-/** Decade movement colours, matching the change chart in CensusCharts. */
-const DIRECTION_COLOUR = {
-  up: "#10B981",
-  down: "#F43F5E",
-  flat: "#64748B",
-} as const;
-
-const DIRECTION_CHIP = {
-  up: "bg-[#10B981] text-[#04110C]",
-  down: "bg-[#F43F5E] text-black",
-  flat: "bg-[#64748B] text-white",
-} as const;
-
-/** Bar colours for the 2001 / 2011 pair, matching the radar legend. */
-const Y2001 = "#06B6D4";
-const Y2011 = "#10B981";
-
-/** Unit suffix worth printing next to a value. */
-const unitSuffix = (unit: string) => (unit === "%" ? "%" : "");
-
-/**
- * Same builder the change chart uses, so the badge on each card is literally
- * the bar height drawn below it.
- */
-const CHANGE_BY_KEY = new Map(changeRows().map((row) => [row.key, row]));
-
-const KPIS = KPI_KEYS.map((key) => {
-  const row = CHANGE_BY_KEY.get(key);
-  if (!row) throw new Error(`Unknown census indicator: ${key}`);
-  const suffix = unitSuffix(row.unit);
-  return {
-    key,
-    row,
-    title: row.label,
-    note: KPI_NOTES[key],
-    value: `${formatCensusValue(row.y2011, row.unit)}${suffix}`,
-    baseline: `${formatCensusValue(row.y2001, row.unit)}${suffix}`,
-    badge: `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(1)}% in decade`,
-    // A rate moves in points, not percent — "9.2%" would read as a relative
-    // change and understate it, so rates print as points.
-    absolute:
-      row.unit === "%"
-        ? `${row.absolute >= 0 ? "+" : ""}${row.absolute.toFixed(2)} pts`
-        : `${row.absolute >= 0 ? "+" : ""}${formatCensusValue(row.absolute, row.unit)} more`,
-    colour: DIRECTION_COLOUR[row.direction],
-    chip: DIRECTION_CHIP[row.direction],
-  };
-});
+const CARDS: Card[] = [
+  {
+    key: "opening",
+    title: "India at the first census",
+    value: compact(OPENING_CENSUS.population),
+    note: "people · census of record",
+    badge: String(OPENING_CENSUS.year),
+    tone: "slate",
+    year: OPENING_CENSUS.year,
+    footLeft: "opens the series",
+    footRight: `${CENTURY_MULTIPLE}× by ${LAST_CENSUS_YEAR}`,
+    accent: "#06B6D4",
+  },
+  {
+    key: "closing",
+    title: "India at the latest census",
+    value: compact(INDIA_2011.population),
+    note: "people · census of record",
+    badge: String(LAST_CENSUS_YEAR),
+    tone: "green",
+    year: LAST_CENSUS_YEAR,
+    footLeft: `${compact(OPENING_CENSUS.population)} in ${FIRST_CENSUS_YEAR}`,
+    footRight: `${CENTURY_MULTIPLE}× the century start`,
+    accent: "#10B981",
+  },
+  {
+    key: "peak",
+    title: "Fastest decade on record",
+    value: `+${PEAK_DECADAL.percentChange.toFixed(2)}%`,
+    note: `${PEAK_DECADAL.from} → ${PEAK_DECADAL.to}`,
+    badge: "PEAK RATE",
+    tone: "amber",
+    year: PEAK_DECADAL.to,
+    footLeft: `+${compact(PEAK_DECADAL.absoluteChange)} people`,
+    footRight: "never repeated",
+    accent: "#FBBF24",
+  },
+  {
+    key: "latest",
+    title: "Slowest growth in 50 years",
+    value: `+${LATEST_DECADAL.percentChange.toFixed(2)}%`,
+    note: `${LATEST_DECADAL.from} → ${LATEST_DECADAL.to}`,
+    badge: "COOLING",
+    tone: "cyan",
+    year: LATEST_DECADAL.to,
+    footLeft: `+${compact(LATEST_DECADAL.absoluteChange)} people`,
+    footRight: "2nd largest ever",
+    accent: "#06B6D4",
+  },
+];
 
 /** Category colours for the live community feed on the dashboard. */
 const TAG_COLORS: Record<string, string> = {
@@ -82,73 +109,54 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 /**
- * The 2001 and 2011 figures as two bars on the indicator's own natural domain
- * — the same scale the "Profile Shape" radar below uses. This replaces an
- * invented 16-point sparkline with the only two data points the card actually
- * has, and makes the gap between them the real decadal gap.
+ * The whole 1901-2011 series as one line, with this card's census year marked.
+ *
+ * All four cards share the same curve, so they read as four views of one
+ * century rather than four unrelated statistics — which is the difference
+ * between a card about 2011 and a card about where 2011 sits in 110 years.
  */
-function DecadeBars({ row, colour }: { row: CensusIndicator; colour: string }) {
-  const [low, high] = row.domain;
-  const span = high - low || 1;
-  const bar = (value: number) => Math.max(2, ((value - low) / span) * 26);
-  const h2001 = bar(row.y2001);
-  const h2011 = bar(row.y2011);
-  const baseline = 32;
-  const top2001 = baseline - h2001;
-  const top2011 = baseline - h2011;
+function CenturySpark({ year, accent }: { year: number; accent: string }) {
+  const n = INDIA_DECADAL.length;
+  const max = Math.max(...INDIA_DECADAL.map((p) => p.population));
+  const x = (i: number) => 6 + (i / (n - 1)) * 84;
+  const y = (v: number) => 34 - (v / max) * 26;
+  const index = INDIA_DECADAL.findIndex((p) => p.year === year);
+  const point = INDIA_DECADAL[index];
+  const previous = INDIA_DECADAL[index - 1];
 
   return (
     <svg
-      viewBox="0 0 96 44"
-      className="h-11 w-20 shrink-0 sm:w-24"
+      viewBox="0 0 96 40"
+      className="h-10 w-20 shrink-0 sm:w-24"
       role="img"
-      aria-label={`${row.label}: ${formatCensusValue(row.y2001, row.unit)} in 2001, ${formatCensusValue(row.y2011, row.unit)} in 2011`}
+      aria-label={`India population ${FIRST_CENSUS_YEAR} to ${LAST_CENSUS_YEAR}, marking ${year}`}
     >
-      <line
-        x1="6"
-        y1={baseline}
-        x2="90"
-        y2={baseline}
-        stroke="var(--nb-ink)"
+      <line x1="6" y1="34" x2="90" y2="34" stroke="var(--nb-ink)" strokeWidth="2" />
+      <polyline
+        points={INDIA_DECADAL.map(
+          (p, i) => `${x(i).toFixed(2)},${y(p.population).toFixed(2)}`,
+        ).join(" ")}
+        fill="none"
+        stroke="#334155"
         strokeWidth="2"
+        strokeLinejoin="miter"
       />
-      {/*
-        A decade is a small move on most of these natural ranges — the urban
-        share shifts by about a pixel. The connector is drawn behind the bars
-        so only the gap between them shows the line, which keeps the direction
-        of travel readable even where the two heights look identical.
-      */}
-      <line
-        x1="37"
-        y1={top2001}
-        x2="65"
-        y2={top2011}
-        stroke={colour}
-        strokeWidth="3"
-        strokeLinecap="square"
+      {previous && (
+        <polyline
+          points={`${x(index - 1).toFixed(2)},${y(previous.population).toFixed(2)} ${x(index).toFixed(2)},${y(point.population).toFixed(2)}`}
+          fill="none"
+          stroke={accent}
+          strokeWidth="3"
+          strokeLinecap="square"
+        />
+      )}
+      <rect
+        x={x(index) - 3}
+        y={y(point.population) - 3}
+        width="6"
+        height="6"
+        fill={accent}
       />
-      <rect x="26" y={top2001} width="22" height={h2001} fill={Y2001} />
-      <rect x="54" y={top2011} width="22" height={h2011} fill={Y2011} />
-      <text
-        x="37"
-        y="42"
-        textAnchor="middle"
-        fontSize="8"
-        fontWeight="900"
-        fill="#64748B"
-      >
-        01
-      </text>
-      <text
-        x="65"
-        y="42"
-        textAnchor="middle"
-        fontSize="8"
-        fontWeight="900"
-        fill="#64748B"
-      >
-        11
-      </text>
     </svg>
   );
 }
@@ -173,20 +181,20 @@ export default function CommandCenter() {
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">{today}</span>
       </div>
 
-      {/* Census baseline — the same table the charts further down are drawn from */}
+      {/* Century baseline — every figure below is read from the uploaded CSVs */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="nb-title text-sm md:text-base">
-          Census Baseline
+          A Century Of Census
         </h2>
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
-          Census Of India · 2001 → 2011
+          Census Of India · {FIRST_CENSUS_YEAR} → {LAST_CENSUS_YEAR}
         </span>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {KPIS.map((kpi, index) => (
+        {CARDS.map((card, index) => (
           <motion.article
-            key={kpi.key}
+            key={card.key}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: index * 0.05 }}
@@ -194,34 +202,34 @@ export default function CommandCenter() {
           >
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[var(--nb-text-muted)]">
-                {kpi.title}
+                {card.title}
               </h2>
               <span
-                className={`nb-chip whitespace-normal text-right ${kpi.chip}`}
+                className={`nb-chip whitespace-normal text-right ${TONES[card.tone]}`}
               >
-                {kpi.badge}
+                {card.badge}
               </span>
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <p className="text-3xl font-black leading-none tabular-nums text-[var(--nb-text)]">
-                  {kpi.value}
+                  {card.value}
                 </p>
                 <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
-                  {kpi.note}
+                  {card.note}
                 </p>
               </div>
-              <DecadeBars row={kpi.row} colour={kpi.colour} />
+              <CenturySpark year={card.year} accent={card.accent} />
             </div>
             <div className="mt-4 flex items-center justify-between gap-2 border-t-2 border-[var(--nb-ink)] pt-2.5">
-              <span className="text-xs font-black tabular-nums text-[var(--nb-text-dim)]">
-                2001 · {kpi.baseline}
+              <span className="text-[11px] font-black uppercase tracking-wide text-[var(--nb-text-dim)]">
+                {card.footLeft}
               </span>
               <span
                 className="whitespace-nowrap text-xs font-black tabular-nums"
-                style={{ color: kpi.colour }}
+                style={{ color: card.accent }}
               >
-                {kpi.absolute}
+                {card.footRight}
               </span>
             </div>
           </motion.article>
@@ -313,7 +321,7 @@ export default function CommandCenter() {
       <section className="mt-8">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="nb-title text-sm md:text-base">
-            India Between 2001 And 2011
+            Every State, 2001 → 2011
           </h2>
           <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
             Census Of India
