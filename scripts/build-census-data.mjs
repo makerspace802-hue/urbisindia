@@ -588,6 +588,27 @@ ${commute
 ];
 `;
 
+/**
+ * Refuse to write output that does not parse.
+ *
+ * This generator once emitted `changes: 1, 2, 3` — an array with no brackets —
+ * and the build only failed once the file was already on disk and the dev
+ * server had cached it. Parsing the candidate before writing means a broken
+ * build can never reach the filesystem at all, rather than being caught later
+ * by a type-check or by a user staring at a red overlay.
+ */
+const { transform } = await import("esbuild");
+try {
+  await transform(body, { loader: "ts" });
+} catch (error) {
+  const detail = (error.errors ?? [])
+    .map((e) => `  line ${e.location.line}:${e.location.column} ${e.text}`)
+    .join("\n");
+  throw new Error(
+    `Refusing to write src/lib/censusData.ts — emitted code does not parse:\n${detail}\n\nNothing was written.`,
+  );
+}
+
 writeFileSync(join(ROOT, "src/lib/censusData.ts"), body);
 
 console.log(
