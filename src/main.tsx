@@ -2,6 +2,9 @@ import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { AppLayout } from "@/components/AppLayout";
+import { LocationProvider } from "@/components/LocationProvider";
+import { RouteBoundary } from "@/components/RouteBoundary";
+import { RouteSkeleton } from "@/components/RouteSkeleton";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -19,17 +22,6 @@ const QuizPage = lazy(() => import("./pages/QuizPage.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-
-// Simple loading fallback for route transitions
-function RouteLoading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
-        <span className="nb-chip bg-[var(--nb-surface-2)]">Indexing census grids</span>
-      </div>
-    </div>
-  );
-}
 
 /** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
  *  crashing the whole app (e.g. hook errors in the browser runtime). */
@@ -123,33 +115,35 @@ createRoot(document.getElementById("root")!).render(
       </ToolbarErrorBoundary>
       <ConvexAuthProvider client={convex}>
         <SettingsProvider>
+        <LocationProvider>
         <BrowserRouter>
           <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
+          <Suspense fallback={<RouteSkeleton />}>
             <Routes>
               <Route element={<AppLayout />}>
-                <Route path="/" element={<CommandCenter />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/report" element={<ReportPortal />} />
-                <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/" element={<RouteBoundary label="command centre"><CommandCenter /></RouteBoundary>} />
+                <Route path="/analytics" element={<RouteBoundary label="analytics"><Analytics /></RouteBoundary>} />
+                <Route path="/report" element={<RouteBoundary label="report"><ReportPortal /></RouteBoundary>} />
+                <Route path="/quiz" element={<RouteBoundary label="quiz"><QuizPage /></RouteBoundary>} />
               </Route>
               <Route
                 path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
+                element={<RouteBoundary label="sign in"><AuthPage redirectAfterAuth="/dashboard" /></RouteBoundary>}
               />
               <Route
                 path="/dashboard"
                 element={
                   <RequireAuth>
-                    <Dashboard />
+                    <RouteBoundary label="dashboard"><Dashboard /></RouteBoundary>
                   </RequireAuth>
                 }
               />
-              <Route path="*" element={<NotFound />} />
+              <Route path="*" element={<RouteBoundary label="page"><NotFound /></RouteBoundary>} />
             </Routes>
           </Suspense>
         </BrowserRouter>
         <Toaster />
+        </LocationProvider>
         </SettingsProvider>
       </ConvexAuthProvider>
     </RootErrorBoundary>

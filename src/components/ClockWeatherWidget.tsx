@@ -2,10 +2,10 @@ import { useSettings } from "@/components/SettingsProvider";
 import {
   CONDITION,
   detailFor,
-  FALLBACK_POINT,
   fetchWeather,
   type LiveWeather,
 } from "@/lib/weather";
+import { useLocation } from "@/lib/locationContext";
 import { RefreshCw, Wind, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -82,41 +82,32 @@ export default function ClockWeatherWidget() {
   const [expanded, setExpanded] = useState(false);
   const [pos, setPos] = useState(readPosition);
   const [live, setLive] = useState<LiveWeather | null>(null);
-  const [place, setPlace] = useState(FALLBACK_POINT.label);
   const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
 
   /**
+   * The shared fix.
+   *
+   * This widget used to call `navigator.geolocation` itself, so it prompted
+   * separately from the Census charts below it and could show one city's weather
+   * while the page claimed another. It now reads the same fix, and refetches
+   * automatically when that fix changes.
+   */
+  const { fix, label: place } = useLocation();
+
+  /**
    * Weather is read, never chosen.
    *
-   * Geolocation is preferred; when it is refused or unavailable the widget falls
-   * back to a fixed real location rather than inventing a reading. The manual
-   * condition picker that used to sit here let the displayed state disagree with
-   * the world, so it is gone.
+   * The point comes from the provider, which always resolves to somewhere real —
+   * GPS, the cached fix, an IP lookup, or the configured default city. The
+   * manual condition picker that used to sit here let the displayed state
+   * disagree with the world, so it is gone.
    */
-  const load = useCallback(async () => {
+  const load = useCallback(async (lat: number, lon: number) => {
     setBusy(true);
-    let point = { ...FALLBACK_POINT, label: FALLBACK_POINT.label };
-    if ("geolocation" in navigator) {
-      const fix = await new Promise<GeolocationPosition | null>((resolve) => {
-        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
-          enableHighAccuracy: false,
-          timeout: 6000,
-          maximumAge: 15 * 60_000,
-        });
-      });
-      if (fix) {
-        point = {
-          lat: fix.coords.latitude,
-          lon: fix.coords.longitude,
-          label: "Your location",
-        };
-      }
-    }
     try {
-      const reading = await fetchWeather(point.lat, point.lon);
+      const reading = await fetchWeather(lat, lon);
       setLive(reading);
-      setPlace(point.label);
     } catch {
       // Leave the last good reading on screen rather than blanking the widget.
     } finally {
@@ -128,13 +119,13 @@ export default function ClockWeatherWidget() {
     // The first fetch is deferred to a macrotask so the effect body itself never
     // updates state. Calling `load()` directly would set `busy` synchronously
     // during the effect, which cascades an extra render before anything is known.
-    const initial = setTimeout(() => void load(), 0);
-    const id = setInterval(() => void load(), 15 * 60_000);
+    const initial = setTimeout(() => void load(fix.lat, fix.lon), 0);
+    const id = setInterval(() => void load(fix.lat, fix.lon), 15 * 60_000);
     return () => {
       clearTimeout(initial);
       clearInterval(id);
     };
-  }, [load]);
+  }, [load, fix.lat, fix.lon]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -285,7 +276,7 @@ export default function ClockWeatherWidget() {
               </span>
               <button
                 type="button"
-                onClick={() => void load()}
+                onClick={() => void load(fix.lat, fix.lon)}
                 disabled={busy}
                 aria-label="Refresh weather"
                 className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"

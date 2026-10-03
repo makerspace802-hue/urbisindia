@@ -1,5 +1,7 @@
 import { RetroMarquee, RetroSwitcher } from "@/components/Retro";
-import { censusName, matchPlace, PLACE_FALLBACK } from "@/lib/geo";
+import { LocationPulse } from "@/components/LocationPulse";
+import { PLACE_FALLBACK } from "@/lib/geo";
+import { useLocation } from "@/lib/locationContext";
 import {
   COMMUTE,
   COMMUTE_BANDS,
@@ -11,7 +13,7 @@ import {
   STATE_PROFILE,
 } from "@/lib/censusData";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const GAIN = "#10B981";
 const LOSS = "#F43F5E";
@@ -27,9 +29,6 @@ const VIEWS: { id: View; label: string; source: string }[] = [
 ];
 
 type GeoState = "requesting" | "located" | "denied" | "unavailable";
-
-/** Safe to read at module scope; avoids an effect that only flips a flag. */
-const HAS_GEO = typeof navigator !== "undefined" && "geolocation" in navigator;
 
 /**
  * Diverging scale, not a good/bad one: green is "more", red is "less".
@@ -386,29 +385,20 @@ function CommuteGrid({ place }: { place: string | null }) {
 
 export default function CensusCharts() {
   const [view, setView] = useState<View>("decadal");
-  const [place, setPlace] = useState<string | null>(null);
-  const [geoState, setGeoState] = useState<GeoState>(HAS_GEO ? "requesting" : "unavailable");
 
   /**
-   * Ask the browser once. Every setState lives inside an async callback, so
-   * none of them fire synchronously during the effect.
+   * Location comes from the shared provider rather than a private request, so
+   * this chart and the clock widget ask the browser once between them.
    */
-  useEffect(() => {
-    if (!HAS_GEO) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const hit = matchPlace(pos.coords.latitude, pos.coords.longitude);
-        if (hit) {
-          setPlace(censusName(hit.name));
-          setGeoState("located");
-        } else {
-          setGeoState("unavailable");
-        }
-      },
-      () => setGeoState("denied"),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 },
-    );
-  }, []);
+  const { status, state: place, busy, approximate, request } = useLocation();
+  const geoState: GeoState =
+    status === "success"
+      ? "located"
+      : status === "requesting"
+        ? "requesting"
+        : status === "denied"
+          ? "denied"
+          : "unavailable";
 
   const active = VIEWS.find((v) => v.id === view)!;
   const label =
@@ -416,7 +406,7 @@ export default function CensusCharts() {
       ? place
       : geoState === "requesting"
         ? "Locating…"
-        : PLACE_FALLBACK;
+        : place ?? PLACE_FALLBACK;
 
   return (
     <div>
@@ -428,17 +418,37 @@ export default function CensusCharts() {
           label="Census views"
         />
         <div className="flex flex-wrap items-center gap-2">
-          <span className="nb-chip bg-[#06B6D4] text-[#03151A]">Showing: {label}</span>
+          <span className="nb-chip bg-[#06B6D4] text-[#03151A]">
+            {busy && <LocationPulse size={12} />}
+            Showing: {label}
+          </span>
           <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
             {active.source}
           </span>
         </div>
       </div>
 
-      {geoState === "denied" && (
-        <p className="nb-chip mb-3 bg-[#FBBF24] text-[#1A1400]">
-          Location declined — showing all India. Allow location to see your own state.
-        </p>
+      {geoState !== "located" && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="nb-chip bg-[#FBBF24] text-[#1A1400]">
+            {geoState === "denied" || geoState === "unavailable"
+              ? `Location unavailable — showing ${place ? place.toLowerCase() : "all India"}.`
+              : "Locating you…"}
+          </p>
+          {approximate && geoState !== "requesting" && (
+            <p className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+              Approximate — from your network, not GPS
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => request({ force: true })}
+            disabled={busy}
+            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
+          >
+            Retry with my location
+          </button>
+        </div>
       )}
 
       <div className="mb-4">

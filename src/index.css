@@ -366,6 +366,29 @@
     opacity: 1;
     transform: none;
   }
+
+  /* Radar sweep for the location lookup. Expands from a fixed centre using
+     `transform: scale()` alone, so it never triggers layout — growing the
+     element's width would repaint on every frame. The second ring is offset by
+     an inline `animation-delay` rather than a second keyframe set, so both rings
+     share one compositing layer and one animation name. */
+  .nb-radar-ring {
+    animation: nb-radar 1.6s ease-out infinite;
+    will-change: transform, opacity;
+  }
+  @keyframes nb-radar {
+    0% {
+      transform: scale(0.55);
+      opacity: 0.85;
+    }
+    70% {
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -380,5 +403,8 @@
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .nb-radar-ring {
+    animation: none !important;
   }
 }

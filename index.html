@@ -3,16 +3,71 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-  <link rel="apple-touch-icon" href="/logo.svg" />
-  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0B0F17" />
+
+  <title>URBIS India — Smart City Management &amp; Census Analytics</title>
   <meta
     name="description"
-    content="URBIS India — smart city management platform with predictive urban analytics, citizen reporting and Census decade tracking."
+    content="URBIS India turns the Census of India 2011 into a living picture of the country — 35 states across 11 decades, household density, who we are, and how we get to work."
   />
-  <title>URBIS India — Smart City Management</title>
+  <meta name="author" content="Pratyush Dhote &amp; Avyan Koranne" />
+  <link rel="canonical" href="https://urbisindia.app/" />
+
+  <!-- Favicons. A maskable variant is included because Android crops the
+       square logo to the launcher's own shape. -->
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <meta name="theme-color" content="#0B0F17" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="URBIS India" />
+  <meta property="og:url" content="https://urbisindia.app/" />
+  <meta property="og:title" content="URBIS India — Smart City Management" />
+  <meta
+    property="og:description"
+    content="Census of India 2011 turned into a command centre: 35 states, 11 decades, real figures, no invented data."
+  />
+  <meta property="og:image" content="https://urbisindia.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="URBIS India — smart city analytics dashboard" />
+  <meta property="og:locale" content="en_IN" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="URBIS India — Smart City Management" />
+  <meta
+    name="twitter:description"
+    content="Census of India 2011 turned into a command centre: 35 states, 11 decades, real figures, no invented data."
+  />
+  <meta name="twitter:image" content="https://urbisindia.app/og-image.png" />
+
+  <!-- The Census tables this site reads are tabular data, which is a format
+       Google indexes well and a chart cannot be summarised from. -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "URBIS India",
+      "url": "https://urbisindia.app/",
+      "description": "Smart city management platform presenting Census of India 2011 analytics across every state and union territory.",
+      "applicationCategory": "GovernmentApplication",
+      "operatingSystem": "Any",
+      "inLanguage": "en-IN",
+      "creator": [
+        { "@type": "Person", "name": "Pratyush Dhote" },
+        { "@type": "Person", "name": "Avyan Koranne" }
+      ]
+    }
+  </script>
 
   <script>
     // Apply the stored theme before first paint so the page never flashes
