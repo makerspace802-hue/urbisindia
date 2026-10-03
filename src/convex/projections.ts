@@ -1,38 +1,42 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-const yearPointValidator = v.object({
+const projectionPointValidator = v.object({
   year: v.number(),
-  tempDrop: v.number(),
-  modalShift: v.number(),
-  savings: v.number(),
+  population: v.number(),
+  india: v.number(),
+  multiple: v.number(),
 });
 
 /**
- * Store a simulated 10-year outlook. One row per city so re-running the
- * simulator overwrites the previous scenario instead of piling up history.
+ * Stores a Census-grounded growth projection.
+ *
+ * This used to persist a simulator run: a canopy target, a congestion toll, a
+ * misting toggle, and a series of temperature-drop, modal-shift and annual-saving
+ * figures derived from them by linear formulas. None of those are Census
+ * quantities, and no code read them back — the chart was write-only.
+ *
+ * What is stored now is the state's own observed decadal growth rate and the
+ * population series produced by applying it. One row per state, so re-running
+ * overwrites rather than accumulating.
  */
 export const saveProjection = mutation({
   args: {
-    city: v.string(),
+    state: v.string(),
     population: v.number(),
-    canopyBonus: v.number(),
-    toll: v.number(),
-    misting: v.boolean(),
-    points: v.array(yearPointValidator),
+    observedRatePercent: v.number(),
+    points: v.array(projectionPointValidator),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("projections")
-      .withIndex("by_city", (q) => q.eq("city", args.city))
+      .withIndex("by_state", (q) => q.eq("state", args.state))
       .unique();
 
     const doc = {
-      city: args.city,
+      state: args.state,
       population: args.population,
-      canopyBonus: args.canopyBonus,
-      toll: args.toll,
-      misting: args.misting,
+      observedRatePercent: args.observedRatePercent,
       points: args.points,
       createdAt: Date.now(),
     };
@@ -45,35 +49,34 @@ export const saveProjection = mutation({
   },
 });
 
-/** The stored outlook for a city, if the simulator has been run for it. */
+/** The stored projection for a state, if one has been run. */
 export const getProjection = query({
-  args: { city: v.string() },
-  handler: async (ctx, { city }) => {
+  args: { state: v.string() },
+  handler: async (ctx, { state }) => {
     const row = await ctx.db
       .query("projections")
-      .withIndex("by_city", (q) => q.eq("city", city))
+      .withIndex("by_state", (q) => q.eq("state", state))
       .unique();
     if (!row) return null;
     return {
-      city: row.city,
+      state: row.state,
       population: row.population,
-      canopyBonus: row.canopyBonus,
-      toll: row.toll,
-      misting: row.misting,
+      observedRatePercent: row.observedRatePercent,
       points: row.points,
       createdAt: row.createdAt,
     };
   },
 });
 
-/** Every saved city outlook, newest first. */
+/** Every saved projection, newest first. */
 export const listProjections = query({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db.query("projections").order("desc").take(50);
     return rows.map((row) => ({
-      city: row.city,
+      state: row.state,
       population: row.population,
+      observedRatePercent: row.observedRatePercent,
       points: row.points,
       createdAt: row.createdAt,
     }));

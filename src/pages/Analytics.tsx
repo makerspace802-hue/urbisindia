@@ -1,76 +1,28 @@
-import { NbSlider, NbSwitch } from "@/components/NbControls";
-import {
-  AXIS_LINE,
-  AXIS_TICK,
-  ChartPanel,
-  ChartTooltip,
-  LegendSwatch,
-} from "@/components/ChartKit";
+import { CensusInsights } from "@/components/CensusInsights";
 import { StateTrends } from "@/components/StateTrends";
-import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
-/* ------------------------------------------------------------------ data */
-
-const DISTRICT_DATA = [
-  { district: "Downtown Core", temp: 38.4, shade: 18 },
-  { district: "Financial District", temp: 37.1, shade: 22 },
-  { district: "Industrial Zone 4", temp: 41.0, shade: 12 },
-  { district: "North Suburban Hub", temp: 34.6, shade: 34 },
-  { district: "West Tech Corridor", temp: 33.9, shade: 38 },
-  { district: "Harbor District", temp: 36.2, shade: 26 },
-];
-
-const MODAL_DATA = [
-  { hour: "06", bus: 420, micro: 180, ice: 980 },
-  { hour: "08", bus: 860, micro: 640, ice: 2150 },
-  { hour: "10", bus: 640, micro: 520, ice: 1740 },
-  { hour: "12", bus: 710, micro: 610, ice: 1820 },
-  { hour: "14", bus: 690, micro: 640, ice: 1760 },
-  { hour: "16", bus: 820, micro: 700, ice: 1980 },
-  { hour: "18", bus: 940, micro: 760, ice: 2260 },
-  { hour: "20", bus: 560, micro: 380, ice: 1320 },
-];
-
-const SHADE_DATA = [
-  { name: "Natural Forest", value: 34, color: "#10B981" },
-  { name: "Green Roofs", value: 14, color: "#06B6D4" },
-  { name: "Smart Shade Canopies", value: 12, color: "#FBBF24" },
-  { name: "Unshaded Asphalt", value: 40, color: "#F43F5E" },
-];
-
-/* ------------------------------------------------------------------ page */
+/**
+ * Analytics — every figure here comes from the uploaded Census of India 2011
+ * tables.
+ *
+ * This page previously carried four charts built from hand-entered numbers: a
+ * district heat-island series, a commuter modal split by hour, a shade-infrastructure
+ * breakdown, and a climate/mobility simulator whose outputs were produced by
+ * linear formulas over slider positions. None of it came from a Census table,
+ * and the simulator presented its results as a "Live Model". All of that is gone.
+ *
+ * What replaces it divides cleanly and does not overlap with the command centre:
+ *
+ *   StateTrends     one state, resolved from the visitor's location, against
+ *                   India, across all eleven censuses and the last decade
+ *   CensusInsights  all 35 states compared with EACH OTHER on four dimensions
+ *                   nothing else plots
+ *
+ * The command centre keeps the other four table views (decadal grid, spatial,
+ * social, commute), so between the two pages each table is drawn once.
+ */
 
 export default function Analytics() {
-  const [canopy, setCanopy] = useState(12);
-  const [toll, setToll] = useState(4);
-  const [misting, setMisting] = useState(true);
-
-  const readouts = useMemo(() => {
-    const tempDrop = canopy * 0.1 + (misting ? 0.5 : 0) + toll * 0.015;
-    const modalShift = canopy * 1.3 + toll * 1.6;
-    const savings = canopy * 0.25 + toll * 0.15 + (misting ? 0.6 : 0);
-    return {
-      tempDrop: `-${tempDrop.toFixed(1)} °C`,
-      modalShift: `+${Math.round(modalShift)}%`,
-      savings: `$${savings.toFixed(1)} Million / yr`,
-    };
-  }, [canopy, toll, misting]);
-
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -84,283 +36,12 @@ export default function Analytics() {
 
       <StateTrends />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Chart 1 */}
-        <ChartPanel
-          title="Urban Heat Island vs. Tree Canopy Density Across Districts"
-          className="lg:col-span-2"
-          legend={
-            <>
-              <LegendSwatch color="#F43F5E" label="Peak Surface Temp °C" />
-              <LegendSwatch color="#10B981" label="Shade Coverage %" />
-            </>
-          }
-        >
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={DISTRICT_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
-                <XAxis
-                  dataKey="district"
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={AXIS_LINE}
-                  angle={-22}
-                  height={66}
-                  interval={0}
-                  tickMargin={6}
-                />
-                <YAxis
-                  yAxisId="temp"
-                  domain={[30, 44]}
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={AXIS_LINE}
-                  width={34}
-                />
-                <YAxis
-                  yAxisId="shade"
-                  orientation="right"
-                  domain={[0, 50]}
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={AXIS_LINE}
-                  width={30}
-                />
-                <Tooltip
-                  cursor={{ stroke: "#0B0F17", strokeWidth: 2 }}
-                  content={(props) => <ChartTooltip {...props} />}
-                />
-                <Line
-                  yAxisId="temp"
-                  type="monotone"
-                  dataKey="temp"
-                  name="Peak Surface Temp °C"
-                  stroke="#F43F5E"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "#F43F5E", stroke: "#000000", strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: "#F43F5E", stroke: "#000000", strokeWidth: 2 }}
-                />
-                <Line
-                  yAxisId="shade"
-                  type="monotone"
-                  dataKey="shade"
-                  name="Shade Coverage %"
-                  stroke="#10B981"
-                  strokeWidth={3}
-                  strokeDasharray="8 4"
-                  dot={{ r: 4, fill: "#10B981", stroke: "#000000", strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: "#10B981", stroke: "#000000", strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartPanel>
+      <CensusInsights />
 
-        {/* Chart 2 */}
-        <ChartPanel
-          title="Commuter Modal & Carbon Displacement"
-          legend={
-            <>
-              <LegendSwatch color="#06B6D4" label="Public Bus" />
-              <LegendSwatch color="#10B981" label="Micro-Mobility / Bikes" />
-              <LegendSwatch color="#F43F5E" label="Private ICE Vehicles" />
-            </>
-          }
-        >
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MODAL_DATA} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                <CartesianGrid stroke="rgba(100,116,139,0.35)" vertical={false} />
-                <XAxis
-                  dataKey="hour"
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={AXIS_LINE}
-                  tickMargin={6}
-                />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={AXIS_LINE} width={44} />
-                <Tooltip
-                  cursor={{ fill: "rgba(11,15,23,0.5)" }}
-                  content={(props) => <ChartTooltip {...props} />}
-                />
-                <Bar
-                  dataKey="bus"
-                  name="Public Bus"
-                  stackId="split"
-                  fill="#06B6D4"stroke="var(--nb-ink)"
-                    strokeWidth={1.5}
-                  maxBarSize={52}
-                />
-                <Bar
-                  dataKey="micro"
-                  name="Micro-Mobility / Bikes"
-                  stackId="split"
-                  fill="#10B981"stroke="var(--nb-ink)"
-                    strokeWidth={1.5}
-                  maxBarSize={52}
-                />
-                <Bar
-                  dataKey="ice"
-                  name="Private ICE Vehicles"
-                  stackId="split"
-                  fill="#F43F5E"stroke="var(--nb-ink)"
-                    strokeWidth={1.5}
-                  maxBarSize={52}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartPanel>
-
-        {/* Chart 3 */}
-        <ChartPanel title="Shade Infrastructure Distribution">
-          <div className="grid items-center gap-4 md:grid-cols-[1fr_minmax(180px,220px)]">
-            <div className="relative h-[240px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={SHADE_DATA}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius="58%"
-                    outerRadius="86%"
-                    paddingAngle={2}
-                    stroke="var(--nb-ink)"
-                    strokeWidth={2}
-                    isAnimationActive
-                  >
-                    {SHADE_DATA.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={(props) => <ChartTooltip {...props} />} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-black leading-none text-[var(--nb-text)]">
-                  100%
-                </span>
-                <span className="mt-1 text-[9px] font-black uppercase tracking-widest text-[var(--nb-text-muted)]">
-                  Surface Split
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {SHADE_DATA.map((entry, index) => (
-                <div
-                  key={entry.name}
-                  className={[
-                    "flex items-center gap-2",
-                    index > 0 ? "border-t-2 border-[var(--nb-ink)] pt-2" : "",
-                  ].join(" ")}
-                >
-                  <span
-                    className="size-3.5 shrink-0 border-2 border-[var(--nb-ink)]"
-                    style={{ background: entry.color }}
-                  />
-                  <span className="text-xs font-bold text-[var(--nb-text-2)]">
-                    {entry.name}
-                  </span>
-                  <span className="ml-auto text-xs font-black tabular-nums text-[var(--nb-text)]">
-                    {entry.value}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </ChartPanel>
-      </div>
-
-      {/* What-If Simulator */}
-      <motion.section
-        initial={{ opacity: 0, y: 14 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-60px" }}
-        transition={{ duration: 0.3 }}
-        className="nb-panel"
-      >
-        <div className="nb-subpanel flex flex-wrap items-center gap-3 border-b-2 border-[var(--nb-ink)] p-4">
-          <h2 className="nb-title text-sm md:text-base">
-            🎛️ Dynamic Climate &amp; Mobility Simulator
-          </h2>
-          <span className="nb-chip ml-auto bg-[var(--nb-surface-2)] text-[#FBBF24]">
-            <span className="size-2 animate-pulse bg-[#FBBF24]" />
-            Live Model
-          </span>
-        </div>
-
-        <div className="grid gap-8 p-4 md:p-6 lg:grid-cols-2">
-          {/* Controls */}
-          <div className="flex flex-col gap-7">
-            <div>
-              <NbSlider
-                label="Urban Tree Canopy Target"
-                value={canopy}
-                min={0}
-                max={35}
-                fill="#10B981"
-                displayValue={`+${canopy}%`}
-                onChange={setCanopy}
-              />
-              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                Range +0% to +35%
-              </p>
-            </div>
-
-            <div>
-              <NbSlider
-                label="Dynamic Congestion Toll"
-                value={toll}
-                min={0}
-                max={15}
-                fill="#06B6D4"
-                displayValue={`$${toll}`}
-                onChange={setToll}
-              />
-              <p className="mt-1.5 text-center text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                Range $0 to $15
-              </p>
-            </div>
-
-            <div className="border-t-2 border-[var(--nb-ink)] pt-5">
-              <NbSwitch
-                label="Automated Emergency Heat Misting System"
-                checked={misting}
-                onChange={setMisting}
-              />
-            </div>
-          </div>
-
-          {/* Live readouts */}
-          <div className="flex flex-col justify-center gap-4">
-            <div className="border-2 border-[var(--nb-ink)] bg-[#06B6D4] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#03151A]">
-                Estimated Microclimate Temp Drop
-              </p>
-              <p className="mt-2 text-3xl font-black leading-none tabular-nums text-black md:text-4xl">
-                {readouts.tempDrop}
-              </p>
-            </div>
-            <div className="border-2 border-[var(--nb-ink)] bg-[#10B981] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#04110C]">
-                Commuter Modal Shift to Micro-Mobility
-              </p>
-              <p className="mt-2 text-3xl font-black leading-none tabular-nums text-black md:text-4xl">
-                {readouts.modalShift}
-              </p>
-            </div>
-            <div className="border-2 border-[var(--nb-ink)] bg-[#FBBF24] p-4 shadow-[5px_5px_0_0_var(--nb-ink)]">
-              <p className="text-[10px] font-black uppercase tracking-widest text-black/70">
-                Annual Municipal Health &amp; Energy Savings
-              </p>
-              <p className="mt-2 text-3xl font-black leading-none tabular-nums text-black md:text-4xl">
-                {readouts.savings}
-              </p>
-            </div>
-          </div>
-        </div>
-      </motion.section>
+      <p className="pt-2 text-[10px] font-bold uppercase tracking-widest text-[var(--nb-text-dim)]">
+        Every figure on this page is read from the uploaded Census of India 2011
+        tables — nothing here is hand-entered, modelled or estimated
+      </p>
     </div>
   );
 }

@@ -23,11 +23,14 @@ const issueStatusValidator = v.union(
   v.literal("Resolved"),
 );
 
-const yearPointValidator = v.object({
+const projectionPointValidator = v.object({
   year: v.number(),
-  tempDrop: v.number(),
-  modalShift: v.number(),
-  savings: v.number(),
+  /** Projected population for that year. */
+  population: v.number(),
+  /** India's projected population in the same year, for comparison. */
+  india: v.number(),
+  /** Cumulative growth from the 2011 base, as a multiple. */
+  multiple: v.number(),
 });
 
 const schema = defineSchema(
@@ -88,14 +91,14 @@ const schema = defineSchema(
 
     // saved 10-year city outlooks from the climate & mobility simulator
     projections: defineTable({
-      city: v.string(),
+      // State name, or "India" when the visitor is outside the country.
+      state: v.string(),
       population: v.number(),
-      canopyBonus: v.number(),
-      toll: v.number(),
-      misting: v.boolean(),
-      points: v.array(yearPointValidator),
+      /** The state's observed 2001-2011 decadal rate, as a percentage. */
+      observedRatePercent: v.number(),
+      points: v.array(projectionPointValidator),
       createdAt: v.number(),
-    }).index("by_city", ["city"]),
+    }).index("by_state", ["state"]),
 
     // -------------------------------------------------------------------------
     // Admin grants are keyed by EMAIL, not by user id.
