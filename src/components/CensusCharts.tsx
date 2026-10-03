@@ -21,11 +21,11 @@ const NEUTRAL = "#64748B";
 
 type View = "decadal" | "place" | "people" | "commute";
 
-const VIEWS: { id: View; label: string; source: string }[] = [
-  { id: "decadal", label: "Every Census", source: "Table A-2 · data-1.csv" },
-  { id: "place", label: "Where We Live", source: "Table A-1 · data-2.csv" },
-  { id: "people", label: "Who We Are", source: "Census Abstract · data-4.csv" },
-  { id: "commute", label: "Getting To Work", source: "Table B-28 · data-3.csv" },
+const VIEWS: { id: View; label: string }[] = [
+  { id: "decadal", label: "Every Census" },
+  { id: "place", label: "Where We Live" },
+  { id: "people", label: "Who We Are" },
+  { id: "commute", label: "Getting To Work" },
 ];
 
 type GeoState = "requesting" | "located" | "denied" | "unavailable";
@@ -400,7 +400,6 @@ export default function CensusCharts() {
           ? "denied"
           : "unavailable";
 
-  const active = VIEWS.find((v) => v.id === view)!;
   const label =
     geoState === "located" && place
       ? place
@@ -421,9 +420,6 @@ export default function CensusCharts() {
           <span className="nb-chip bg-[#06B6D4] text-[#03151A]">
             {busy && <LocationPulse size={12} />}
             Showing: {label}
-          </span>
-          <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
-            {active.source}
           </span>
         </div>
       </div>

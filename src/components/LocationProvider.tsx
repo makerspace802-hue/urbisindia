@@ -1,14 +1,23 @@
 import { toast } from "sonner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { censusName, matchPlace } from "@/lib/geo";
-import { locate, type LocateStatus, type LocationFix } from "@/lib/locate";
+import {
+  FALLBACK_PLACE,
+  locate,
+  type LocateStatus,
+  type LocationFix,
+} from "@/lib/locate";
 import { LOCATE_MESSAGES, LocationContext } from "@/lib/locationContext";
 import type { ReactNode } from "react";
 
-/** State before the first attempt resolves. Never blank, never a spinner alone. */
+/**
+ * Shown before the first attempt resolves. Uses the configured default
+ * coordinates so the weather widget can fetch something real immediately, but
+ * with a label that does not claim to know where the visitor is.
+ */
 const INITIAL_FIX: LocationFix = {
-  lat: 23.2599,
-  lon: 77.4126,
+  lat: FALLBACK_PLACE.lat,
+  lon: FALLBACK_PLACE.lon,
   label: "Locating…",
   state: null,
   source: "fallback",

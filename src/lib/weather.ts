@@ -68,12 +68,6 @@ export interface LiveWeather {
   observedAt: string;
 }
 
-/**
- * Used when geolocation is unavailable or refused, so the widget still shows a
- * real place's weather rather than an invented one. Bhopal — the school's city.
- */
-export const FALLBACK_POINT = { lat: 23.2599, lon: 77.4126, label: "Bhopal" };
-
 const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
 export async function fetchWeather(

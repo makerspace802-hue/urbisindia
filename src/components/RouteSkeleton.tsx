@@ -60,3 +60,60 @@ export function RouteSkeleton() {
     </div>
   );
 }
+
+/**
+ * Sign-in form placeholder. Mirrors the auth card's own proportions so the page
+ * does not reflow when the real form arrives.
+ */
+export function AuthSkeleton() {
+  return (
+    <div
+      className="mx-auto flex min-h-screen max-w-md items-center px-4"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">Loading sign in…</span>
+
+      <div className="nb-panel w-full space-y-4 p-6">
+        <Skeleton className="mx-auto size-12 bg-[var(--nb-surface-2)]" />
+        <Skeleton className="mx-auto h-5 w-40 bg-[var(--nb-surface-2)]" />
+        <Skeleton className="mx-auto h-3 w-64 max-w-full bg-[var(--nb-surface-2)]" />
+
+        <div className="space-y-3 pt-2">
+          <Skeleton className="h-10 w-full bg-[var(--nb-surface-2)]" />
+          <Skeleton className="h-10 w-full bg-[var(--nb-surface-2)]" />
+        </div>
+
+        <Skeleton className="h-11 w-full bg-[var(--nb-surface-2)]" />
+        <Skeleton className="mx-auto h-3 w-32 bg-[var(--nb-surface-2)]" />
+      </div>
+    </div>
+  );
+}
+
+/** Placeholder for the signed-in dashboard while the session is checked. */
+export function DashboardSkeleton() {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">Loading your dashboard…</span>
+
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <div className="mb-6 space-y-3">
+          <Skeleton className="h-8 w-64 bg-[var(--nb-surface-2)]" />
+          <Skeleton className="h-3 w-80 max-w-full bg-[var(--nb-surface-2)]" />
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="nb-panel space-y-3 p-4">
+              <Skeleton className="h-2.5 w-24 bg-[var(--nb-surface-2)]" />
+              <Skeleton className="h-7 w-32 bg-[var(--nb-surface-2)]" />
+              <Skeleton className="h-2 w-full bg-[var(--nb-surface-2)]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

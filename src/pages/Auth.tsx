@@ -1,3 +1,4 @@
+import { AuthSkeleton } from "@/components/RouteSkeleton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -665,15 +666,5 @@ function ErrorText({ children }: { children: React.ReactNode }) {
 }
 
 export default function AuthRoute(props: AuthProps) {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[var(--nb-bg)]">
-          <Loader2 className="h-6 w-6 animate-spin text-[var(--nb-text-muted)]" />
-        </div>
-      }
-    >
-      <Auth {...props} />
-    </Suspense>
-  );
+  return <Suspense fallback={<AuthSkeleton />}>{<Auth {...props} />}</Suspense>;
 }

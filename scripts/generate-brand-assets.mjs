@@ -47,7 +47,7 @@ function chunk(type, data) {
 }
 
 /** RGBA pixel buffer -> PNG file bytes. */
-function encodePng(width, height, rgba) {
+export function encodePng(width, height, rgba) {
   const raw = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) {
     raw[y * (width * 4 + 1)] = 0; // filter type 0 (None)
@@ -77,7 +77,7 @@ function encodePng(width, height, rgba) {
 
 const SS = 4; // supersample factor
 
-function createCanvas(width, height) {
+export function createCanvas(width, height) {
   const w = width * SS;
   const h = height * SS;
   const buf = new Float32Array(w * h * 4); // straight alpha
@@ -89,16 +89,23 @@ function createCanvas(width, height) {
     h,
     buf,
 
-    /** Source-over composite of one supersampled pixel. */
-    blend(x, y, [r, g, b], a) {
+    /**
+     * Source-over composite of one supersampled pixel.
+     *
+     * `color` is 0-255 RGB, matching how the palette below is written, and is
+     * normalised to 0-1 on the way in. The buffer is stored normalised so the
+     * accumulator maths stays in float; `toPng` converts back.
+     */
+    blend(x, y, color, a) {
       if (a <= 0 || x < 0 || y < 0 || x >= w || y >= h) return;
       const i = (y * w + x) * 4;
       const dst = buf[i + 3];
       const out = a + dst * (1 - a);
       if (out <= 0) return;
-      buf[i] = (r * a + buf[i] * dst * (1 - a)) / out;
-      buf[i + 1] = (g * a + buf[i + 1] * dst * (1 - a)) / out;
-      buf[i + 2] = (b * a + buf[i + 2] * dst * (1 - a)) / out;
+      const keep = (dst * (1 - a)) / out;
+      buf[i] = (color[0] / 255) * (a / out) + buf[i] * keep;
+      buf[i + 1] = (color[1] / 255) * (a / out) + buf[i + 1] * keep;
+      buf[i + 2] = (color[2] / 255) * (a / out) + buf[i + 2] * keep;
       buf[i + 3] = out;
     },
 
@@ -140,6 +147,7 @@ function createCanvas(width, height) {
  * ------------------------------------------------------------------ */
 
 const INK = [11, 15, 23];
+export const INK_RGB = INK;
 const SHELL = [232, 236, 242];
 const CYAN = [6, 182, 212];
 const GREEN = [16, 185, 129];
@@ -320,7 +328,7 @@ const FONT = {
   R: "####./#...#/#...#/####./#.#../#..#./#...#",
   S: ".####/#..../#..../.###./....#/....#/####.",
   T: "#####/..#../..#../..#../..#../..#../..#..",
-  U: "#...#/#...#/#...#/#...#/#...#/#...#/#####",
+  U: "#...#/#...#/#...#/#...#/#...#/#####/.....",
   Y: "#...#/#...#/#...#/.###./..#../..#../..#..",
   "0": ".###./#...#/#..##/#.#.#/##..#/#...#/.###.",
   "1": "..#../.##../..#../..#../..#../..#../.###.",
@@ -421,7 +429,11 @@ const outputs = [
   ["public/og-image.png", ogImage()],
 ];
 
-for (const [path, bytes] of outputs) {
-  writeFileSync(path, bytes);
-  console.log(`wrote ${path} (${bytes.length} bytes)`);
+// Only write when run directly, so the test can import the encoder and
+// round-trip it without regenerating the files as a side effect.
+if (process.argv[1] && process.argv[1].endsWith("generate-brand-assets.mjs")) {
+  for (const [path, bytes] of outputs) {
+    writeFileSync(path, bytes);
+    console.log(`wrote ${path} (${bytes.length} bytes)`);
+  }
 }

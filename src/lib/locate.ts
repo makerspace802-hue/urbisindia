@@ -103,10 +103,6 @@ const FALLBACK_FIX: LocationFix = {
   source: "fallback",
 };
 
-export function fallbackOutcome(status: LocateStatus): LocateOutcome {
-  return { status, fix: FALLBACK_FIX, approximate: true };
-}
-
 /**
  * Read the cached fix, ignoring anything malformed or stale.
  *
@@ -143,6 +139,13 @@ export function readCache(now = Date.now()): LocationFix | null {
       source: "cache",
     };
   } catch {
+    // Malformed JSON, or storage blocked outright. Drop the entry so it is not
+    // re-parsed on every read for the rest of the session.
+    try {
+      window.localStorage.removeItem(CACHE_KEY);
+    } catch {
+      // Storage unavailable; nothing further to do.
+    }
     return null;
   }
 }
@@ -165,27 +168,26 @@ export function writeCache(fix: LocationFix, now = Date.now()): void {
   }
 }
 
-export function clearCache(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(CACHE_KEY);
-  } catch {
-    // Nothing to do; the cache simply stays as it was.
-  }
-}
-
-/** `getCurrentPosition` has no abort of its own, so the wait is raced. */
+/**
+ * `getCurrentPosition` has no abort of its own, so the wait is raced.
+ *
+ * A rejection is re-thrown rather than folded into the timeout result. Folding
+ * them together loses the error code, which is the only way to tell a refusal
+ * (code 1) from a failed fix (code 2) or a timeout (code 3) — and reporting a
+ * refusal as a timeout tells the visitor the wrong thing about their own
+ * browser settings.
+ */
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve(null), ms);
     work.then(
       (value) => {
         clearTimeout(timer);
         resolve(value);
       },
-      () => {
+      (error) => {
         clearTimeout(timer);
-        resolve(null);
+        reject(error);
       },
     );
   });
@@ -294,7 +296,11 @@ export async function locate(options: LocateOptions = {}): Promise<LocateOutcome
 
   if (!force) {
     const cached = readCache();
-    if (cached) return { status: "success", fix: cached, approximate: true };
+    // A cache hit is not "approximate": the cache only ever holds real GPS
+    // fixes (the IP fallback is deliberately never written), so replaying one
+    // is exactly as accurate as the original. Flagging it otherwise would show
+    // the visitor a "not GPS" warning about their own precise location.
+    if (cached) return { status: "success", fix: cached, approximate: false };
   }
 
   const gps = await requestGps();
@@ -322,10 +328,10 @@ export async function locate(options: LocateOptions = {}): Promise<LocateOutcome
       state: resolveState?.(viaIp.lat, viaIp.lon) ?? null,
       source: "ip",
     };
-    // Only a real GPS fix is worth caching. Caching the IP fallback would make
-    // a one-off VPN or hotel-network guess look like a settled location for the
-    // next six hours.
-    if (!force) writeCache(fix);
+    // Deliberately NOT cached, despite the coordinates being real. The IP
+    // fallback resolves to the network's exit node rather than the visitor —
+    // on a corporate VPN or hotel network that can be another city entirely.
+    // Caching it would pin that guess for the next six hours.
     return { status: gps.status, fix, approximate: true };
   }
 
