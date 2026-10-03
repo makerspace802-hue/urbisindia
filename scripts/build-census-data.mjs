@@ -196,6 +196,126 @@ india2011.sexRatio = (india2011.females / india2011.males) * 1000;
 india2011.childSexRatio = (india2011.femaleChildren06 ?? 0) || null;
 delete india2011.childSexRatio;
 
+// ------------------------------------------------------ state x decadal grid
+
+/**
+ * Every decadal percentage change, state by decadal.
+ *
+ * Charting the full century rather than only 2001->2011 is what surfaces the
+ * losses: only one state fell in the last decade, but 23 state-decades fell
+ * across the series and 20 of 35 states decline in at least one.
+ */
+const decadalLabels = [];
+for (let i = 1; i < indiaDecadal.length; i += 1) {
+  decadalLabels.push(`${indiaDecadal[i - 1].year}-${String(indiaDecadal[i].year).slice(2)}`);
+}
+
+/** [fromYear, toYear] for each entry of DECADAL_LABELS. */
+const decadalPairs = indiaDecadal
+  .slice(1)
+  .map((point, i) => [indiaDecadal[i].year, point.year]);
+
+const stateDecadal = [...byUnit.entries()]
+  .map(([name, rows]) => {
+    // Keyed by census YEAR, never by position. Not every unit was counted in
+    // every census, so a positional list would silently close the gap and
+    // chart one decade's growth against another's population.
+    const population = new Map(rows.map((r) => [r.year, r.population]));
+    const changes = decadalPairs.map(([from, to]) => {
+      const before = population.get(from);
+      const after = population.get(to);
+      if (before == null || after == null || before === 0) return null;
+      return Number(((after / before - 1) * 100).toFixed(2));
+    });
+    if (changes.every((c) => c === null)) return null;
+    return { name, fromYear: Math.min(...population.keys()), changes };
+  })
+  .filter(Boolean)
+  .sort((a, b) => {
+    const lastA = a.changes.at(-1) ?? -Infinity;
+    const lastB = b.changes.at(-1) ?? -Infinity;
+    return lastB - lastA;
+  });
+
+// ------------------------------------------------------ space and settlement
+
+const a1Rural = a1India.find((r) => /Rural/.test(r[5]));
+
+const indiaSpatial = {
+  ruralPopulation: num(a1Total?.[10]) - num(a1Urban?.[10]),
+  urbanPopulation: num(a1Urban?.[10]),
+  ruralAreaSqKm: num(a1Rural?.[13]),
+  urbanAreaSqKm: num(a1Urban?.[13]),
+  inhabitedVillages: num(a1Total?.[6]),
+  uninhabitedVillages: num(a1Total?.[7]),
+  towns: num(a1Urban?.[8]),
+};
+indiaSpatial.ruralDensity =
+  indiaSpatial.ruralPopulation / indiaSpatial.ruralAreaSqKm;
+indiaSpatial.urbanDensity =
+  indiaSpatial.urbanPopulation / indiaSpatial.urbanAreaSqKm;
+indiaSpatial.densityRatio =
+  indiaSpatial.urbanDensity / indiaSpatial.ruralDensity;
+
+// ------------------------------------------------------------ social profile
+
+const indiaSocial = {
+  population: pcaVal("TOT_P"),
+  males: pcaVal("TOT_M"),
+  females: pcaVal("TOT_F"),
+  children06: pcaVal("P_06"),
+  maleChildren06: pcaVal("M_06"),
+  femaleChildren06: pcaVal("F_06"),
+  literate: pcaVal("P_LIT"),
+  illiterate: pcaVal("P_ILL"),
+  scheduledCaste: pcaVal("P_SC"),
+  scheduledTribe: pcaVal("P_ST"),
+  workers: pcaVal("TOT_WORK_P"),
+  marginalWorkers: pcaVal("MARGWORK_P"),
+  nonWorkers: pcaVal("NON_WORK_P"),
+};
+indiaSocial.sexRatio =
+  (indiaSocial.females / indiaSocial.males) * 1000;
+indiaSocial.childSexRatio =
+  (indiaSocial.femaleChildren06 / indiaSocial.maleChildren06) * 1000;
+indiaSocial.literacyPercent =
+  (indiaSocial.literate / (indiaSocial.population - indiaSocial.children06)) * 100;
+
+// ------------------------------------------------------------------- commute
+
+/**
+ * Census 2011 Table B-28: "other workers" by mode of travel and distance.
+ *
+ * The zero cells carry real meaning — nobody walks 31km to work, nobody takes
+ * a train 500 metres — so this table has genuine gains and losses built in.
+ * "No travel" is kept as its own band because the source footnote says it
+ * also captures not-reported.
+ */
+const COMMUTE_BANDS = [
+  "No travel",
+  "0-1 km",
+  "2-5 km",
+  "6-10 km",
+  "11-20 km",
+  "21-30 km",
+  "31-50 km",
+  "51+ km",
+  "Not stated",
+];
+
+const b28 = readCsv("data/data-3.csv")
+  .slice(6)
+  .filter(
+    (r) =>
+      r[0] === "B0128" && r[3] === "Total" && r[4] === "INDIA" && num(r[6]) !== null,
+  );
+
+const commute = b28.map((r) => ({
+  mode: r[5].trim(),
+  total: num(r[6]),
+  values: COMMUTE_BANDS.map((_, k) => num(r[9 + k * 3])),
+}));
+
 // ---------------------------------------------------------------- emit
 
 /**
@@ -356,6 +476,116 @@ export const CENTURY_MULTIPLE = ${n(
 
 export const FIRST_CENSUS_YEAR = ${indiaDecadal[0].year};
 export const LAST_CENSUS_YEAR = ${indiaDecadal.at(-1).year};
+
+/** Every decadal step in the series, as "1901-11" … "2001-11". */
+export const DECADAL_LABELS: string[] = ${JSON.stringify(decadalLabels)};
+
+export interface StateDecadal {
+  name: string;
+  /** First census this unit appears in — not every state existed in 1901. */
+  fromYear: number;
+  /** Percentage change per decadal, aligned index-for-index to DECADAL_LABELS. */
+  changes: (number | null)[];
+}
+
+/** Every state across every decadal, so losses are visible and not averaged away. */
+export const STATE_DECADAL: StateDecadal[] = [
+${stateDecadal
+  .map(
+    (s) =>
+      `  { name: ${JSON.stringify(s.name)}, fromYear: ${s.fromYear}, changes: [${s.changes
+        .map((c) => (c === null ? "null" : c))
+        .join(", ")}] },`,
+  )
+  .join("\n")}
+];
+
+export interface IndiaSpatial {
+  ruralPopulation: number;
+  urbanPopulation: number;
+  ruralAreaSqKm: number;
+  urbanAreaSqKm: number;
+  ruralDensity: number;
+  urbanDensity: number;
+  densityRatio: number;
+  inhabitedVillages: number;
+  uninhabitedVillages: number;
+  towns: number;
+}
+
+/** Where India actually lives, from Census 2011 Table A-1. */
+export const INDIA_SPATIAL: IndiaSpatial = {
+  ruralPopulation: ${n(indiaSpatial.ruralPopulation)},
+  urbanPopulation: ${n(indiaSpatial.urbanPopulation)},
+  ruralAreaSqKm: ${n(Number(indiaSpatial.ruralAreaSqKm.toFixed(2)))},
+  urbanAreaSqKm: ${n(Number(indiaSpatial.urbanAreaSqKm.toFixed(2)))},
+  ruralDensity: ${n(Number(indiaSpatial.ruralDensity.toFixed(0)))},
+  urbanDensity: ${n(Number(indiaSpatial.urbanDensity.toFixed(0)))},
+  densityRatio: ${n(Number(indiaSpatial.densityRatio.toFixed(1)))},
+  inhabitedVillages: ${n(indiaSpatial.inhabitedVillages)},
+  uninhabitedVillages: ${n(indiaSpatial.uninhabitedVillages)},
+  towns: ${n(indiaSpatial.towns)},
+};
+
+export interface IndiaSocial {
+  population: number;
+  males: number;
+  females: number;
+  children06: number;
+  maleChildren06: number;
+  femaleChildren06: number;
+  literate: number;
+  illiterate: number;
+  scheduledCaste: number;
+  scheduledTribe: number;
+  workers: number;
+  marginalWorkers: number;
+  nonWorkers: number;
+  sexRatio: number;
+  childSexRatio: number;
+  literacyPercent: number;
+}
+
+/** Who India is, from the Census 2011 Primary Census Abstract. */
+export const INDIA_SOCIAL: IndiaSocial = {
+  population: ${n(indiaSocial.population)},
+  males: ${n(indiaSocial.males)},
+  females: ${n(indiaSocial.females)},
+  children06: ${n(indiaSocial.children06)},
+  maleChildren06: ${n(indiaSocial.maleChildren06)},
+  femaleChildren06: ${n(indiaSocial.femaleChildren06)},
+  literate: ${n(indiaSocial.literate)},
+  illiterate: ${n(indiaSocial.illiterate)},
+  scheduledCaste: ${n(indiaSocial.scheduledCaste)},
+  scheduledTribe: ${n(indiaSocial.scheduledTribe)},
+  workers: ${n(indiaSocial.workers)},
+  marginalWorkers: ${n(indiaSocial.marginalWorkers)},
+  nonWorkers: ${n(indiaSocial.nonWorkers)},
+  sexRatio: ${n(Number(indiaSocial.sexRatio.toFixed(0)))},
+  childSexRatio: ${n(Number(indiaSocial.childSexRatio.toFixed(0)))},
+  literacyPercent: ${n(Number(indiaSocial.literacyPercent.toFixed(2)))},
+};
+
+export const COMMUTE_BANDS: string[] = ${JSON.stringify(COMMUTE_BANDS)};
+
+export interface CommuteRow {
+  mode: string;
+  total: number;
+  /** Aligned to COMMUTE_BANDS. A zero is meaningful, not missing. */
+  values: (number | null)[];
+}
+
+/** Census 2011 Table B-28 — other workers by mode of travel and distance. */
+export const COMMUTE: CommuteRow[] = [
+${commute
+  .map(
+    (c) =>
+      `  { mode: ${JSON.stringify(c.mode)}, total: ${n(c.total)}, values: [${c.values
+        .map((v) => (v === null ? "null" : v))
+        .join(", ")}] },`,
+  )
+  .join("\n")}
+];
 `;
 
 writeFileSync(join(ROOT, "src/lib/censusData.ts"), body);

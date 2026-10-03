@@ -1,154 +1,365 @@
-import { STATE_GROWTH } from "@/lib/censusData";
+import {
+  COMMUTE,
+  COMMUTE_BANDS,
+  DECADAL_LABELS,
+  INDIA_2011,
+  INDIA_SOCIAL,
+  INDIA_SPATIAL,
+  STATE_DECADAL,
+} from "@/lib/censusData";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
-const AXIS_TICK = { fill: "#64748B", fontSize: 10, fontWeight: 700 } as const;
-const AXIS_LINE = { stroke: "#0B0F17", strokeWidth: 2 } as const;
-const UP = "#10B981";
-const DOWN = "#F43F5E";
-const GRID = "#1E293B";
+const GAIN = "#10B981";
+const LOSS = "#F43F5E";
+const NEUTRAL = "#64748B";
 
-const compact = (v: number) =>
-  v >= 1_000_000
-    ? `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M`
-    : v >= 1_000
-      ? `${(v / 1_000).toFixed(0)}K`
-      : v.toLocaleString("en-IN");
+type View = "decadal" | "place" | "people" | "commute";
 
-type Row = (typeof STATE_GROWTH)[number];
-type View = "rate" | "absolute";
+const VIEWS: { id: View; label: string; source: string }[] = [
+  { id: "decadal", label: "Every Census", source: "Table A-2 · data-1.csv" },
+  { id: "place", label: "Where We Live", source: "Table A-1 · data-2.csv" },
+  { id: "people", label: "Who We Are", source: "Census Abstract · data-4.csv" },
+  { id: "commute", label: "Getting To Work", source: "Table B-28 · data-3.csv" },
+];
 
 /**
- * Category tick: the state's name over its actual 2001 and 2011 counts.
+ * Colour for a signed magnitude.
  *
- * Showing the raw pair next to every bar is what stops the two views from
- * being read as competing stories — a state high on one is low on the other,
- * and the reason is visible without leaving the chart.
+ * A diverging scale rather than a good/bad one: green is "more", red is
+ * "less", and nothing here claims that a shrinking population or a shorter
+ * commute is a bad outcome — only that it moved one way.
  */
-function RowTick({
-  x,
-  y,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value: string };
-}) {
-  const row = STATE_GROWTH.find((r) => r.name === payload?.value);
-  if (!row) return null;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={-8}
-        y={0}
-        dy={-2}
-        textAnchor="end"
-        fill="#E2E8F0"
-        fontSize="11"
-        fontWeight="900"
-      >
-        {row.name}
-      </text>
-      <text
-        x={-8}
-        y={0}
-        dy={11}
-        textAnchor="end"
-        fill="#64748B"
-        fontSize="9"
-        fontWeight="700"
-      >
-        {compact(row.population2001)} → {compact(row.population2011)}
-      </text>
-    </g>
-  );
+function tone(value: number | null, max: number) {
+  if (value === null) return NEUTRAL;
+  if (value === 0) return NEUTRAL;
+  const strength = Math.min(1, Math.abs(value) / max);
+  const alpha = 0.22 + strength * 0.78;
+  return value > 0 ? `rgba(16,185,129,${alpha})` : `rgba(244,63,94,${alpha})`;
 }
 
-function Tip({
-  active,
-  payload,
-  view,
+function Cell({
+  value,
+  max,
+  label,
+  signed = true,
 }: {
-  active?: boolean;
-  payload?: { payload: Row }[];
-  view: View;
+  value: number | null;
+  max: number;
+  label: string;
+  signed?: boolean;
 }) {
-  const row = payload?.[0]?.payload;
-  if (!active || !row) return null;
+  const text =
+    value === null
+      ? "–"
+      : signed
+        ? `${value > 0 ? "+" : ""}${value.toFixed(1)}`
+        : value >= 1_000_000
+          ? `${(value / 1_000_000).toFixed(1)}M`
+          : value >= 1_000
+            ? `${(value / 1_000).toFixed(0)}K`
+            : String(value);
   return (
-    <div className="nb-panel p-3 text-xs">
-      <p className="font-black uppercase tracking-wide text-[var(--nb-text)]">
-        {row.name}
-      </p>
-      <p className="mt-1.5 tabular-nums text-[var(--nb-text-2)]">
-        2001 · {row.population2001.toLocaleString("en-IN")}
-      </p>
-      <p className="tabular-nums text-[var(--nb-text-2)]">
-        2011 · {row.population2011.toLocaleString("en-IN")}
-      </p>
-      <p
-        className="mt-1.5 font-black tabular-nums"
-        style={{ color: row.percentChange >= 0 ? UP : DOWN }}
-      >
-        {view === "rate"
-          ? `${row.percentChange >= 0 ? "+" : ""}${row.percentChange.toFixed(2)}%`
-          : `${row.absoluteChange >= 0 ? "+" : ""}${row.absoluteChange.toLocaleString("en-IN")}`}
-      </p>
+    <div
+      title={label}
+      className="flex h-7 items-center justify-center border border-[var(--nb-ink)] text-[9px] font-black tabular-nums text-white"
+      style={{ backgroundColor: tone(value, max) }}
+    >
+      {text}
     </div>
   );
 }
 
-export default function CensusCharts() {
-  const [view, setView] = useState<View>("rate");
+function Legend() {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-[var(--nb-ink)] pt-2.5 text-[10px] font-black uppercase tracking-wide">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-3" style={{ backgroundColor: GAIN }} />
+        gain
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-3" style={{ backgroundColor: LOSS }} />
+        loss
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-3 w-3" style={{ backgroundColor: NEUTRAL }} />
+        no figure / not applicable
+      </span>
+      <span className="text-[var(--nb-text-dim)]">darker = larger</span>
+    </div>
+  );
+}
 
-  // Both views rank the same 35 units, so switching never reorders the axis and
-  // the eye can compare position rather than re-learn the chart.
-  const data = [...STATE_GROWTH].sort((a, b) =>
-    view === "rate"
-      ? b.percentChange - a.percentChange
-      : b.absoluteChange - a.absoluteChange,
+/**
+ * Every state across every decadal.
+ *
+ * The previous version ranked states on 2001->2011 alone, where only Nagaland
+ * declined and the chart could not show a loss at all. Spanning the full series
+ * surfaces 23 declining state-decades across 20 of the 35 units.
+ */
+function DecadalGrid() {
+  const max = Math.max(
+    ...STATE_DECADAL.flatMap((s) => s.changes.filter((c): c is number => c !== null).map(Math.abs)),
   );
 
-  const key = view === "rate" ? "percentChange" : "absoluteChange";
-  const height = data.length * 24 + 60;
+  // Derived rather than written into the copy, so the sentence under the chart
+  // cannot drift away from the squares above it.
+  const isLoss = (c: number | null) => c !== null && c < 0;
+  const lossCells = STATE_DECADAL.reduce(
+    (n, s) => n + s.changes.filter(isLoss).length,
+    0,
+  );
+  const statesWithLoss = STATE_DECADAL.filter((s) =>
+    s.changes.some(isLoss),
+  ).length;
+  const collapsed = STATE_DECADAL.filter((s) => isLoss(s.changes[1])).length;
+  const worst = STATE_DECADAL.flatMap((s) =>
+    s.changes.map((c, i) => ({ c, i, name: s.name })),
+  )
+    .filter((r) => r.c !== null)
+    .sort((a, b) => (a.c as number) - (b.c as number))[0];
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <div className="min-w-[760px]">
+          <div
+            className="grid gap-1"
+            style={{ gridTemplateColumns: `150px repeat(${DECADAL_LABELS.length}, minmax(0,1fr))` }}
+          >
+            <div />
+            {DECADAL_LABELS.map((label) => (
+              <div
+                key={label}
+                className="pb-1 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
+              >
+                {label}
+              </div>
+            ))}
+            {STATE_DECADAL.map((state) => (
+              <div key={state.name} className="contents">
+                <div className="flex items-center pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]">
+                  {state.name}
+                </div>
+                {state.changes.map((change, i) => (
+                  <Cell
+                    key={`${state.name}-${DECADAL_LABELS[i]}`}
+                    value={change}
+                    max={max}
+                    label={`${state.name} ${DECADAL_LABELS[i]}: ${change === null ? "no figure" : `${change > 0 ? "+" : ""}${change}%`}`}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <Legend />
+      <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+        {statesWithLoss} of {STATE_DECADAL.length} states lost population in at
+        least one decade — {lossCells} losses in total.{" "}
+        <span className="text-[#F43F5E]">
+          1911-21 was catastrophic, with {collapsed} states falling
+        </span>{" "}
+        and {worst.name} down {Math.abs(worst.c as number).toFixed(1)}% in{" "}
+        {DECADAL_LABELS[worst.i]}. The last decade was the gentlest on record:
+        only Nagaland shrank. Blank squares are censuses a unit was not counted
+        in, not missing data.
+      </p>
+    </>
+  );
+}
+
+function Place() {
+  const s = INDIA_SPATIAL;
+  const bars = [
+    { label: "Rural population", value: s.ruralPopulation, colour: GAIN },
+    { label: "Urban population", value: s.urbanPopulation, colour: GAIN },
+    { label: "Rural density /km²", value: s.ruralDensity, colour: GAIN },
+    { label: "Urban density /km²", value: s.urbanDensity, colour: GAIN },
+    { label: "Inhabited villages", value: s.inhabitedVillages, colour: GAIN },
+    { label: "Uninhabited villages", value: s.uninhabitedVillages, colour: LOSS },
+  ];
+  const max = Math.max(...bars.map((b) => b.value));
+
+  return (
+    <>
+      <div className="grid gap-2 md:grid-cols-2">
+        {bars.map((bar) => (
+          <div key={bar.label}>
+            <div className="flex items-baseline justify-between gap-2 text-[11px] font-black uppercase tracking-wide text-[var(--nb-text-2)]">
+              <span>{bar.label}</span>
+              <span className="tabular-nums text-[var(--nb-text)]">
+                {bar.value.toLocaleString("en-IN")}
+              </span>
+            </div>
+            <div className="mt-1 h-3 border-2 border-[var(--nb-ink)]">
+              <div
+                className="h-full"
+                style={{
+                  width: `${(bar.value / max) * 100}%`,
+                  backgroundColor: bar.colour,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <Legend />
+      <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+        <span className="text-[#10B981]">Urban India is {s.densityRatio}× denser
+        than rural India</span> — {s.urbanDensity.toLocaleString("en-IN")} people
+        per km² against {s.ruralDensity}. {s.towns.toLocaleString("en-IN")} towns
+        hold the urban population, spread across only{" "}
+        {Math.round(s.urbanAreaSqKm).toLocaleString("en-IN")} km². Meanwhile{" "}
+        <span className="text-[#F43F5E]">
+          {s.uninhabitedVillages.toLocaleString("en-IN")} villages stand empty
+        </span>
+        .
+      </p>
+    </>
+  );
+}
+
+function People() {
+  const p = INDIA_SOCIAL;
+  const rows = [
+    { label: "Male", value: p.males },
+    { label: "Female", value: p.females },
+    { label: "Children 0-6", value: p.children06 },
+    { label: "Scheduled Caste", value: p.scheduledCaste },
+    { label: "Scheduled Tribe", value: p.scheduledTribe },
+    { label: "Literate", value: p.literate },
+    { label: "Illiterate", value: p.illiterate },
+    { label: "Working", value: p.workers },
+    { label: "Not in work", value: p.nonWorkers },
+  ];
+  const max = Math.max(...rows.map((r) => r.value));
+
+  return (
+    <>
+      <div className="grid gap-1.5 md:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-2">
+            <span className="w-28 shrink-0 text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]">
+              {row.label}
+            </span>
+            <div className="h-5 flex-1 border-2 border-[var(--nb-ink)]">
+              <div
+                className="h-full"
+                style={{
+                  width: `${(row.value / max) * 100}%`,
+                  backgroundColor: GAIN,
+                }}
+              />
+            </div>
+            <span className="w-16 shrink-0 text-right text-[10px] font-black tabular-nums text-[var(--nb-text)]">
+              {row.value.toLocaleString("en-IN")}
+            </span>
+          </div>
+        ))}
+      </div>
+      <Legend />
+      <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+        {" "}
+        {p.illiterate.toLocaleString("en-IN")} people were recorded illiterate
+        against {p.literate.toLocaleString("en-IN")} literate — a{" "}
+        <span className="text-[#F43F5E]">
+          {(p.illiterate / p.literate).toFixed(2)} to one gap
+        </span>
+        . Sex ratio {p.sexRatio} per 1,000, child sex ratio{" "}
+        {p.childSexRatio}.{" "}
+        <span className="text-[#10B981]">
+          Scheduled Tribe is {INDIA_2011.stSharePercent}% of the population
+        </span>
+        .
+      </p>
+    </>
+  );
+}
+
+function CommuteGrid() {
+  const max = Math.max(...COMMUTE.flatMap((r) => r.values.filter((v): v is number => v !== null)));
+  const allModes = COMMUTE.find((r) => r.mode === "All Modes");
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <div className="min-w-[720px]">
+          <div
+            className="grid gap-1"
+            style={{ gridTemplateColumns: `170px repeat(${COMMUTE_BANDS.length}, minmax(0,1fr))` }}
+          >
+            <div />
+            {COMMUTE_BANDS.map((band) => (
+              <div
+                key={band}
+                className="pb-1 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
+              >
+                {band}
+              </div>
+            ))}
+            {COMMUTE.map((row) => (
+              <div key={row.mode} className="contents">
+                <div className="flex items-center pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]">
+                  {row.mode}
+                </div>
+                {row.values.map((value, i) => (
+                  <Cell
+                    key={`${row.mode}-${COMMUTE_BANDS[i]}`}
+                    value={value}
+                    max={max}
+                    signed={false}
+                    label={`${row.mode}, ${COMMUTE_BANDS[i]}: ${value === null ? "no figure" : value.toLocaleString("en-IN")}`}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <Legend />
+      <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
+        The black cells are real absences: nobody walks 31km to work and nobody
+        cycles it by train.{" "}
+        <span className="text-[#F43F5E]">
+          &ldquo;No travel&rdquo; is {((allModes?.values[0] ?? 0) / 1_000_000).toFixed(1)} million
+        </span>{" "}
+        — but the source footnote says that bucket also captures not-reported,
+        so it is kept separate rather than counted as a commute. Walking is the
+        single largest mode at{" "}
+        {(((COMMUTE.find((r) => r.mode === "On foot")?.total ?? 0) / 1_000_000)).toFixed(1)}{" "}
+        million.
+      </p>
+    </>
+  );
+}
+
+export default function CensusCharts() {
+  const [view, setView] = useState<View>("decadal");
+  const active = VIEWS.find((v) => v.id === view)!;
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-0">
-          {(
-            [
-              ["rate", "Fastest Growth"],
-              ["absolute", "Largest Gains"],
-            ] as const
-          ).map(([id, label]) => (
+        <div className="flex flex-wrap gap-0">
+          {VIEWS.map((v) => (
             <button
-              key={id}
+              key={v.id}
               type="button"
-              onClick={() => setView(id)}
+              onClick={() => setView(v.id)}
               className={`nb-btn text-xs ${
-                view === id
+                view === v.id
                   ? "bg-[#10B981] text-[#04110C]"
                   : "bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]"
               }`}
             >
-              {label}
+              {v.label}
             </button>
           ))}
         </div>
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
-          Census 2001 → 2011 · {STATE_GROWTH.length} states &amp; UTs
+          {active.source}
         </span>
       </div>
 
@@ -159,87 +370,16 @@ export default function CensusCharts() {
         transition={{ duration: 0.2 }}
         className="nb-panel p-4"
       >
-        <ResponsiveContainer width="100%" height={height}>
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ top: 8, right: 76, bottom: 8, left: 8 }}
-          >
-            <CartesianGrid
-              horizontal={false}
-              stroke={GRID}
-              strokeDasharray="2 4"
-            />
-            <XAxis
-              type="number"
-              tick={AXIS_TICK}
-              tickLine={false}
-              axisLine={AXIS_LINE}
-              tickFormatter={
-                view === "rate"
-                  ? (v: number) => `${v.toFixed(0)}%`
-                  : (v: number) => compact(v)
-              }
-            />
-            <YAxis
-              type="category"
-              dataKey="name"
-              tick={<RowTick />}
-              tickLine={false}
-              axisLine={false}
-              width={168}
-              interval={0}
-            />
-            <Tooltip
-              cursor={{ fill: "rgba(148,163,184,0.08)" }}
-              content={<Tip view={view} />}
-            />
-            <Bar dataKey={key} isAnimationActive={false}>
-              {data.map((row) => (
-                <Cell
-                  key={row.name}
-                  fill={row.percentChange >= 0 ? UP : DOWN}
-                />
-              ))}
-              <LabelList
-                dataKey={key}
-                position="right"
-                offset={8}
-                fill="#E2E8F0"
-                fontSize={10}
-                fontWeight={900}
-                formatter={(v: number) =>
-                  view === "rate"
-                    ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
-                    : compact(v)
-                }
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-
-        <p className="mt-3 border-t-2 border-[var(--nb-ink)] pt-2.5 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
-          {view === "rate" ? (
-            <>
-              Decadal percentage growth, ranked. The top of this list is small
-              union territories — Dadra &amp; Nagar Haveli and Daman &amp; Diu
-              both doubled their population off a tiny base.{" "}
-              <span className="text-[#F43F5E]">Nagaland was the only unit to
-              shrink (&minus;0.58%).</span>
-            </>
-          ) : (
-            <>
-              Absolute population added, ranked. This is a different set of
-              states from the percentage view: Uttar Pradesh added more people
-              than almost anyone else on this chart added households times
-              over. Rank by percentage and you rank by size of nothing.
-            </>
-          )}{" "}
-          Source: Census of India 2011, Table A-2 (decadal variation in
-          population since 1901), read from{" "}
-          <code className="text-[var(--nb-text-2)]">data/data-1.csv</code>.
-        </p>
+        {view === "decadal" && <DecadalGrid />}
+        {view === "place" && <Place />}
+        {view === "people" && <People />}
+        {view === "commute" && <CommuteGrid />}
       </motion.div>
+
+      <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-[var(--nb-text-dim)]">
+        All four views read from the uploaded Census of India 2011 tables —
+        nothing here is hand-entered
+      </p>
     </div>
   );
 }

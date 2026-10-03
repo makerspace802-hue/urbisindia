@@ -321,7 +321,7 @@ export default function CommandCenter() {
       <section className="mt-8">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="nb-title text-sm md:text-base">
-            Every State, 2001 → 2011
+            India Across The Census Tables
           </h2>
           <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
             Census Of India
