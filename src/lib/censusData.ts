@@ -302,3 +302,59 @@ export const COMMUTE: CommuteRow[] = [
   { mode: "Any other", total: 1307392, values: [0, 146669, 334863, 234438, 149454, 66257, 75179, 145890, 154642] },
   { mode: "No travel", total: 60174308, values: [60174308, 0, 0, 0, 0, 0, 0, 0, 0] },
 ];
+
+export interface StateProfile {
+  name: string;
+  population: number;
+  ruralPopulation: number;
+  urbanPopulation: number;
+  households: number;
+  literate: number;
+  illiterate: number;
+  scheduledCaste: number;
+  scheduledTribe: number;
+  /** null where Table A-1 does not carry an area for the unit. */
+  areaSqKm: number | null;
+  density: number | null;
+  urbanSharePercent: number;
+  literacyPercent: number;
+}
+
+/** Per-state profile, so views can resolve to the visitor's own place. */
+export const STATE_PROFILE: StateProfile[] = [
+  { name: "Dadra & Nagar Haveli", population: 343709, ruralPopulation: 183114, urbanPopulation: 160595, households: 76458, literate: 223230, illiterate: 120479, scheduledCaste: 6186, scheduledTribe: 178564, areaSqKm: 491, density: 700, urbanSharePercent: 46.72, literacyPercent: 76.24 },
+  { name: "Daman & Diu", population: 243247, ruralPopulation: 60396, urbanPopulation: 182851, households: 60956, literate: 188406, illiterate: 54841, scheduledCaste: 6124, scheduledTribe: 15363, areaSqKm: 111, density: 2191, urbanSharePercent: 75.17, literacyPercent: 87.1 },
+  { name: "Puducherry", population: 1247953, ruralPopulation: 395200, urbanPopulation: 852753, households: 302450, literate: 957309, illiterate: 290644, scheduledCaste: 196325, scheduledTribe: 0, areaSqKm: 490, density: 2547, urbanSharePercent: 68.33, literacyPercent: 85.85 },
+  { name: "Meghalaya", population: 2966889, ruralPopulation: 2371439, urbanPopulation: 595450, households: 548059, literate: 1785005, illiterate: 1181884, scheduledCaste: 17355, scheduledTribe: 2555861, areaSqKm: 22429, density: 132, urbanSharePercent: 20.07, literacyPercent: 74.43 },
+  { name: "Arunachal Pradesh", population: 1383727, ruralPopulation: 1066358, urbanPopulation: 317369, households: 270577, literate: 766005, illiterate: 617722, scheduledCaste: 0, scheduledTribe: 951821, areaSqKm: 83743, density: 17, urbanSharePercent: 22.94, literacyPercent: 65.38 },
+  { name: "Bihar", population: 104099452, ruralPopulation: 92341436, urbanPopulation: 11758016, households: 18913565, literate: 52504553, illiterate: 51594899, scheduledCaste: 16567325, scheduledTribe: 1336573, areaSqKm: 94163, density: 1106, urbanSharePercent: 11.29, literacyPercent: 61.8 },
+  { name: "Manipur", population: 2855794, ruralPopulation: 2021640, urbanPopulation: 834154, households: 557859, literate: 1908476, illiterate: 947318, scheduledCaste: 97328, scheduledTribe: 1167422, areaSqKm: 22327, density: 128, urbanSharePercent: 29.21, literacyPercent: 76.94 },
+  { name: "Jammu & Kashmir", population: 12541302, ruralPopulation: 9108060, urbanPopulation: 3433242, households: 2119718, literate: 7067233, illiterate: 5474069, scheduledCaste: 924991, scheduledTribe: 1493299, areaSqKm: 222236, density: 56, urbanSharePercent: 27.38, literacyPercent: 67.16 },
+  { name: "Mizoram", population: 1097206, ruralPopulation: 525435, urbanPopulation: 571771, households: 222853, literate: 848175, illiterate: 249031, scheduledCaste: 1218, scheduledTribe: 1036115, areaSqKm: 21081, density: 52, urbanSharePercent: 52.11, literacyPercent: 91.33 },
+  { name: "Chhattisgarh", population: 25545198, ruralPopulation: 19607961, urbanPopulation: 5937237, households: 5650724, literate: 15379922, illiterate: 10165276, scheduledCaste: 3274269, scheduledTribe: 7822902, areaSqKm: 135192, density: 189, urbanSharePercent: 23.24, literacyPercent: 70.28 },
+  { name: "Jharkhand", population: 32988134, ruralPopulation: 25055073, urbanPopulation: 7933061, households: 6254781, literate: 18328069, illiterate: 14660065, scheduledCaste: 3985644, scheduledTribe: 8645042, areaSqKm: 79716, density: 414, urbanSharePercent: 24.05, literacyPercent: 66.41 },
+  { name: "Rajasthan", population: 68548437, ruralPopulation: 51500352, urbanPopulation: 17048085, households: 12711146, literate: 38275282, illiterate: 30273155, scheduledCaste: 12221593, scheduledTribe: 9238534, areaSqKm: 342239, density: 200, urbanSharePercent: 24.87, literacyPercent: 66.11 },
+  { name: "NCT OF Delhi", population: 16787941, ruralPopulation: 419042, urbanPopulation: 16368899, households: 3435999, literate: 12737767, illiterate: 4050174, scheduledCaste: 2812309, scheduledTribe: 0, areaSqKm: 1483, density: 11320, urbanSharePercent: 97.5, literacyPercent: 86.21 },
+  { name: "Madhya Pradesh", population: 72626809, ruralPopulation: 52557404, urbanPopulation: 20069405, households: 15093256, literate: 42851169, illiterate: 29775640, scheduledCaste: 11342320, scheduledTribe: 15316784, areaSqKm: 308252, density: 236, urbanSharePercent: 27.63, literacyPercent: 69.32 },
+  { name: "Uttar Pradesh", population: 199812341, ruralPopulation: 155317278, urbanPopulation: 44495063, households: 33448035, literate: 114397555, illiterate: 85414786, scheduledCaste: 41357608, scheduledTribe: 1134273, areaSqKm: 240928, density: 829, urbanSharePercent: 22.27, literacyPercent: 67.68 },
+  { name: "Haryana", population: 25351462, ruralPopulation: 16509359, urbanPopulation: 8842103, households: 4857524, literate: 16598988, illiterate: 8752474, scheduledCaste: 5113615, scheduledTribe: 0, areaSqKm: 44212, density: 573, urbanSharePercent: 34.88, literacyPercent: 75.55 },
+  { name: "Gujarat", population: 60439692, ruralPopulation: 34694609, urbanPopulation: 25745083, households: 12248428, literate: 41093358, illiterate: 19346334, scheduledCaste: 4074447, scheduledTribe: 8917174, areaSqKm: 196244, density: 308, urbanSharePercent: 42.6, literacyPercent: 78.03 },
+  { name: "Uttarakhand", population: 10086292, ruralPopulation: 7036954, urbanPopulation: 3049338, households: 2056975, literate: 6880953, illiterate: 3205339, scheduledCaste: 1892516, scheduledTribe: 291903, areaSqKm: 53483, density: 189, urbanSharePercent: 30.23, literacyPercent: 78.82 },
+  { name: "Chandigarh", population: 1055450, ruralPopulation: 28991, urbanPopulation: 1026459, households: 241173, literate: 805438, illiterate: 250012, scheduledCaste: 199086, scheduledTribe: 0, areaSqKm: 114, density: 9258, urbanSharePercent: 97.25, literacyPercent: 86.05 },
+  { name: "Assam", population: 31205576, ruralPopulation: 26807034, urbanPopulation: 4398542, households: 6406471, literate: 19177977, illiterate: 12027599, scheduledCaste: 2231321, scheduledTribe: 3884371, areaSqKm: 78438, density: 398, urbanSharePercent: 14.1, literacyPercent: 72.19 },
+  { name: "Maharashtra", population: 112374333, ruralPopulation: 61556074, urbanPopulation: 50818259, households: 24421519, literate: 81554290, illiterate: 30820043, scheduledCaste: 13275898, scheduledTribe: 10510213, areaSqKm: 307713, density: 365, urbanSharePercent: 45.22, literacyPercent: 82.34 },
+  { name: "Tamil Nadu", population: 72147030, ruralPopulation: 37229590, urbanPopulation: 34917440, households: 18524982, literate: 51837507, illiterate: 20309523, scheduledCaste: 14438445, scheduledTribe: 794697, areaSqKm: 130060, density: 555, urbanSharePercent: 48.4, literacyPercent: 80.09 },
+  { name: "Karnataka", population: 61095297, ruralPopulation: 37469335, urbanPopulation: 23625962, households: 13357027, literate: 40647322, illiterate: 20447975, scheduledCaste: 10474992, scheduledTribe: 4248987, areaSqKm: 191791, density: 319, urbanSharePercent: 38.67, literacyPercent: 75.36 },
+  { name: "Tripura", population: 3673917, ruralPopulation: 2712464, urbanPopulation: 961453, households: 855556, literate: 2804783, illiterate: 869134, scheduledCaste: 654918, scheduledTribe: 1166813, areaSqKm: 10486, density: 350, urbanSharePercent: 26.17, literacyPercent: 87.22 },
+  { name: "Odisha", population: 41974218, ruralPopulation: 34970562, urbanPopulation: 7003656, households: 9637820, literate: 26742595, illiterate: 15231623, scheduledCaste: 7188463, scheduledTribe: 9590756, areaSqKm: 155707, density: 270, urbanSharePercent: 16.69, literacyPercent: 72.87 },
+  { name: "Punjab", population: 27743338, ruralPopulation: 17344192, urbanPopulation: 10399146, households: 5513071, literate: 18707137, illiterate: 9036201, scheduledCaste: 8860179, scheduledTribe: 0, areaSqKm: 50362, density: 551, urbanSharePercent: 37.48, literacyPercent: 75.84 },
+  { name: "West Bengal", population: 91276115, ruralPopulation: 62183113, urbanPopulation: 29093002, households: 20380315, literate: 61538281, illiterate: 29737834, scheduledCaste: 21463270, scheduledTribe: 5296953, areaSqKm: 88752, density: 1028, urbanSharePercent: 31.87, literacyPercent: 76.26 },
+  { name: "Himachal Pradesh", population: 6864602, ruralPopulation: 6176050, urbanPopulation: 688552, households: 1483280, literate: 5039736, illiterate: 1824866, scheduledCaste: 1729252, scheduledTribe: 392126, areaSqKm: 55673, density: 123, urbanSharePercent: 10.03, literacyPercent: 82.8 },
+  { name: "Sikkim", population: 610577, ruralPopulation: 456999, urbanPopulation: 153578, households: 129006, literate: 444952, illiterate: 165625, scheduledCaste: 28275, scheduledTribe: 206360, areaSqKm: 7096, density: 86, urbanSharePercent: 25.15, literacyPercent: 81.42 },
+  { name: "Andhra Pradesh", population: 84580777, ruralPopulation: 56361702, urbanPopulation: 28219075, households: 21022588, literate: 50556760, illiterate: 34024017, scheduledCaste: 13878078, scheduledTribe: 5918073, areaSqKm: 275045, density: 308, urbanSharePercent: 33.36, literacyPercent: 67.02 },
+  { name: "Goa", population: 1458545, ruralPopulation: 551731, urbanPopulation: 906814, households: 343611, literate: 1165487, illiterate: 293058, scheduledCaste: 25449, scheduledTribe: 149275, areaSqKm: 3702, density: 394, urbanSharePercent: 62.17, literacyPercent: 88.7 },
+  { name: "Andaman & Nicobar Islands", population: 380581, ruralPopulation: 237093, urbanPopulation: 143488, households: 94551, literate: 294281, illiterate: 86300, scheduledCaste: 0, scheduledTribe: 28530, areaSqKm: 8249, density: 46, urbanSharePercent: 37.7, literacyPercent: 86.63 },
+  { name: "Lakshadweep", population: 64473, ruralPopulation: 14141, urbanPopulation: 50332, households: 11574, literate: 52553, illiterate: 11920, scheduledCaste: 0, scheduledTribe: 61120, areaSqKm: 30, density: 2149, urbanSharePercent: 78.07, literacyPercent: 91.85 },
+  { name: "Kerala", population: 33406061, ruralPopulation: 17471135, urbanPopulation: 15934926, households: 7853754, literate: 28135824, illiterate: 5270237, scheduledCaste: 3039573, scheduledTribe: 484839, areaSqKm: 38852, density: 860, urbanSharePercent: 47.7, literacyPercent: 94 },
+  { name: "Nagaland", population: 1978502, ruralPopulation: 1407536, urbanPopulation: 570966, households: 396002, literate: 1342434, illiterate: 636068, scheduledCaste: 0, scheduledTribe: 1710973, areaSqKm: 16579, density: 119, urbanSharePercent: 28.86, literacyPercent: 79.55 },
+];

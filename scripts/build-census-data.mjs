@@ -316,6 +316,55 @@ const commute = b28.map((r) => ({
   values: COMMUTE_BANDS.map((_, k) => num(r[9 + k * 3])),
 }));
 
+// ------------------------------------------------------------ per-state profile
+
+const norm = (s) => String(s).toUpperCase().replace(/[^A-Z]/g, "");
+
+/**
+ * A per-state profile so the dashboard can answer for one place, not only for
+ * India as a whole.
+ *
+ * Population, households and the social columns come from the Primary Census
+ * Abstract (data-4); area comes from Table A-1 (data-2), which is the only
+ * table carrying it at state level. Density is computed from those two rather
+ * than read off either, so it uses a single consistent area base.
+ */
+const stateProfile = stateGrowth
+  .map(({ name }) => {
+    const total = pca.find(
+      (r) => norm(r[pcaCol("Name")]) === norm(name) && r[pcaCol("TRU")] === "Total",
+    );
+    const urban = pca.find(
+      (r) => norm(r[pcaCol("Name")]) === norm(name) && r[pcaCol("TRU")] === "Urban",
+    );
+    const area = a1.find(
+      (r) => norm(r[4]) === norm(name) && /Total/.test(r[5] ?? ""),
+    );
+    if (!total || !urban) return null;
+    const get = (row, col) => num(row?.[pcaCol(col)]);
+    const population = get(total, "TOT_P");
+    const urbanPopulation = get(urban, "TOT_P");
+    const areaSqKm = num(area?.[13]);
+    if (!population) return null;
+    return {
+      name,
+      population,
+      ruralPopulation: population - urbanPopulation,
+      urbanPopulation,
+      households: get(total, "No_HH"),
+      literate: get(total, "P_LIT"),
+      illiterate: get(total, "P_ILL"),
+      scheduledCaste: get(total, "P_SC"),
+      scheduledTribe: get(total, "P_ST"),
+      areaSqKm,
+      density: areaSqKm ? population / areaSqKm : null,
+      urbanSharePercent: (urbanPopulation / population) * 100,
+      literacyPercent:
+        ((get(total, "P_LIT") ?? 0) / (population - (get(total, "P_06") ?? 0))) * 100,
+    };
+  })
+  .filter(Boolean);
+
 // ---------------------------------------------------------------- emit
 
 /**
@@ -583,6 +632,47 @@ ${commute
       `  { mode: ${JSON.stringify(c.mode)}, total: ${n(c.total)}, values: [${c.values
         .map((v) => (v === null ? "null" : v))
         .join(", ")}] },`,
+  )
+  .join("\n")}
+];
+
+export interface StateProfile {
+  name: string;
+  population: number;
+  ruralPopulation: number;
+  urbanPopulation: number;
+  households: number;
+  literate: number;
+  illiterate: number;
+  scheduledCaste: number;
+  scheduledTribe: number;
+  /** null where Table A-1 does not carry an area for the unit. */
+  areaSqKm: number | null;
+  density: number | null;
+  urbanSharePercent: number;
+  literacyPercent: number;
+}
+
+/** Per-state profile, so views can resolve to the visitor's own place. */
+export const STATE_PROFILE: StateProfile[] = [
+${stateProfile
+  .map(
+    (s) =>
+      `  { name: ${JSON.stringify(s.name)}, population: ${n(
+        s.population,
+      )}, ruralPopulation: ${n(s.ruralPopulation)}, urbanPopulation: ${n(
+        s.urbanPopulation,
+      )}, households: ${n(s.households)}, literate: ${n(
+        s.literate,
+      )}, illiterate: ${n(s.illiterate)}, scheduledCaste: ${n(
+        s.scheduledCaste,
+      )}, scheduledTribe: ${n(s.scheduledTribe)}, areaSqKm: ${n(
+        s.areaSqKm,
+      )}, density: ${s.density === null ? "null" : n(
+        Number(s.density.toFixed(0)),
+      )}, urbanSharePercent: ${n(Number(s.urbanSharePercent.toFixed(2)))}, literacyPercent: ${n(
+        Number(s.literacyPercent.toFixed(2)),
+      )} },`,
   )
   .join("\n")}
 ];
