@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Building2,
   Check,
+  Lock,
   LogOut,
   MapPin,
   Settings,
@@ -15,7 +16,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 
 export default function Dashboard() {
-  const { signOut } = useAuth();
+  const { isAuthenticated, signOut } = useAuth();
   const navigate = useNavigate();
 
   const profile = useQuery(api.profile.myProfile);
@@ -42,6 +43,13 @@ export default function Dashboard() {
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    // The route is already wrapped in `RequireAuth`, and `updateProfile`
+    // rejects an anonymous caller server-side. This is the third layer: it
+    // means personalisation can never be driven from a signed-out session even
+    // if this component is rendered somewhere without that wrapper.
+    if (!isAuthenticated) return;
+
     await updateProfile({ name, city, country, image });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2500);
@@ -196,6 +204,36 @@ export default function Dashboard() {
               <h2 className="nb-title text-sm">Settings</h2>
             </div>
 
+            {/*
+              Profile personalisation is for accounts only.
+
+              Name, city, country and profile picture are all persisted against
+              a user record, so there is nothing to personalise without one.
+              Rendered as a locked panel rather than a disabled form: a guest
+              who can still fill in the fields is a guest who will lose what
+              they typed on save.
+            */}
+            {!isAuthenticated ? (
+              <div className="flex flex-col items-center gap-3 p-6 text-center">
+                <span className="flex size-12 items-center justify-center border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)]">
+                  <Lock className="size-6 text-[var(--nb-text-muted)]" strokeWidth={2.5} />
+                </span>
+                <p className="text-sm font-black uppercase tracking-wide text-[var(--nb-text)]">
+                  Sign in to personalise your profile
+                </p>
+                <p className="max-w-sm text-xs font-bold leading-relaxed text-[var(--nb-text-muted)]">
+                  Your name, location and profile picture are stored against
+                  your account so your dashboard and reports stay recognisable
+                  to the departments handling them.
+                </p>
+                <Link
+                  to="/auth?returnTo=%2Fdashboard"
+                  className="nb-btn bg-[#10B981] px-5 py-2.5 text-[#04110C]"
+                >
+                  Sign In
+                </Link>
+              </div>
+            ) : (
             <form onSubmit={handleSave} className="flex flex-col gap-4 p-4">
               <div>
                 <label
@@ -276,6 +314,7 @@ export default function Dashboard() {
                 )}
               </button>
             </form>
+            )}
           </section>
 
           <button

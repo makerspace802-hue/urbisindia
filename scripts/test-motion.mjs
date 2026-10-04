@@ -77,11 +77,19 @@ function tokens(scope) {
 const LIGHT = tokens(":root {");
 const DARK = tokens(".dark {");
 
-/** Strips comments and collapses whitespace so assertions survive reformatting. */
+/**
+ * Strips comments and collapses whitespace so assertions survive reformatting.
+ *
+ * Both patterns are anchored to the start of a line. Unanchored, the block
+ * pattern matches the `image/*` in `accept="image/*"` and runs to the next
+ * `/>`, and the line pattern matches the `//` in a `https://` placeholder —
+ * either one silently truncates the file and turns later assertions into
+ * passes that checked nothing.
+ */
 function flat(path) {
   return readFileSync(path, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/[^\n]*/g, " ")
+    .replace(/^\/\*[\s\S]*?\*\//gm, " ")
+    .replace(/^\s*\/\/[^\n]*/gm, " ")
     .replace(/\s+/g, " ");
 }
 

@@ -210,8 +210,12 @@ check("personalisation is hidden from guests, not merely disabled", () => {
   // behind sign-in, so the guest dashboard is exactly what it was before any
   // of this existed.
   const source = readFileSync("src/pages/CommandCenter.tsx", "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
+    // Anchored to the line start on purpose: unanchored, the block pattern
+    // matches an `image/*` attribute and runs to the next `/>`, and the line
+    // pattern matches a `https://` placeholder. Either truncates the file and
+    // makes the assertions below pass on text that was never there.
+    .replace(/^\/\*[\s\S]*?\*\//gm, "")
+    .replace(/^\s*\/\/[^\n]*/gm, "");
 
   assert.match(
     source,
@@ -282,8 +286,8 @@ check("the state picker offers only real Census units", () => {
 
 check("the customiser offers no free text that could become a figure", () => {
   const source = readFileSync("src/components/DashboardCustomiser.tsx", "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
+    .replace(/^\/\*[\s\S]*?\*\//gm, "")
+    .replace(/^\s*\/\/[^\n]*/gm, "");
   // Every state offered comes from the shared list, and the only inputs are a
   // select and checkboxes — no field where a resident could type a number.
   assert.ok(source.includes("PLACES"), "the picker must read the shared place list");

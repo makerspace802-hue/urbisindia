@@ -19,6 +19,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router";
+import { Lock } from "lucide-react";
 
 /* --------------------------------------------------------------- config */
 
@@ -40,6 +42,20 @@ const URGENCY_ACTIVE: Record<Urgency, string> = {
 
 export default function ReportPortal() {
   const { isAuthenticated } = useAuth();
+
+  /**
+   * Filing a report needs an account.
+   *
+   * `submitIssue` has always refused an anonymous caller, but the form did
+   * not: a signed-out visitor could fill in every field, attach a photo and
+   * press submit, and only found out at the end — after the browser had
+   * already uploaded their image to storage for a ticket that was never going
+   * to be created. That is a bad way to be told no, and it wasted their photo.
+   *
+   * So the form is not rendered at all without a session. `handleSubmit` still
+   * checks, so a submit that arrives by any other route cannot reach the
+   * upload either.
+   */
 
   /** The shared fix. Only offered as a one-tap shortcut — never auto-selected,
    *  because a ticket silently stamped to the wrong state is worse than one
@@ -125,6 +141,15 @@ export default function ReportPortal() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    // Defence in depth. The form below is not rendered without a session, so
+    // this only fires if a submit reaches us some other way — and it has to be
+    // above the upload, not below the mutation, or the photo goes to storage
+    // before anything refuses it.
+    if (!isAuthenticated) {
+      setError("Sign in to submit a report.");
+      return;
+    }
 
     const match = categoryByValue(category);
     if (!match || !place || description.trim().length < 10) return;
@@ -231,6 +256,7 @@ export default function ReportPortal() {
 
       <div className="mt-5 mx-auto grid max-w-3xl grid-cols-1 items-start gap-4">
         {/* ------------------------------------------------------ form */}
+        {isAuthenticated ? (
         <form onSubmit={handleSubmit} className="nb-panel">
           <div className="nb-subpanel flex items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
             <h2 className="nb-title text-sm">Report an Issue</h2>
@@ -431,14 +457,45 @@ export default function ReportPortal() {
               className="nb-btn mt-1 w-full bg-[#10B981] py-3 text-[#04110C] disabled:cursor-not-allowed disabled:bg-[var(--nb-surface-2)] disabled:text-[var(--nb-text-dim)]"
             >
               <Send className="size-4" strokeWidth={3} />
-              {submitting
-                ? "Submitting…"
-                : isAuthenticated
-                  ? "Submit Citizen Report"
-                  : "Sign In To Submit"}
+              {submitting ? "Submitting…" : "Submit Citizen Report"}
             </button>
           </div>
         </form>
+        ) : (
+          /* ----------------------------------------------------- locked */
+          <div className="nb-panel">
+            <div className="nb-subpanel flex items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
+              <h2 className="nb-title text-sm">Report an Issue</h2>
+              <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+                Sign In Required
+              </span>
+            </div>
+
+            <div className="flex flex-col items-center gap-4 p-8 text-center">
+              <span className="flex size-14 items-center justify-center border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)]">
+                <Lock className="size-7 text-[var(--nb-text-muted)]" strokeWidth={2.5} />
+              </span>
+              <p className="text-sm font-black uppercase tracking-wide text-[var(--nb-text)]">
+                Only signed-in residents can file a report
+              </p>
+              <p className="max-w-md text-xs font-bold leading-relaxed text-[var(--nb-text-muted)]">
+                A report has to be tied to an account so the department can
+                follow it up, and so it can be tracked privately — reports are
+                never shown on a public feed. Signing in takes about a minute
+                and returns you straight to this page.
+              </p>
+              <Link
+                to="/auth?returnTo=%2Freport"
+                className="nb-btn bg-[#10B981] px-5 py-2.5 text-[#04110C]"
+              >
+                Sign In To File A Report
+              </Link>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
+                You can still browse every census table without an account
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
