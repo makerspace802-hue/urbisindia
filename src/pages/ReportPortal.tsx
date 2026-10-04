@@ -10,16 +10,12 @@ import {
   REPORT_GROUPS,
   REPORT_PLACES,
 } from "@/lib/reportTaxonomy";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { motion } from "framer-motion";
 import {
-  Check,
-  ChevronUp,
   ImagePlus,
   LocateFixed,
   Send,
-  ShieldCheck,
-  Wrench,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -40,42 +36,6 @@ const URGENCY_ACTIVE: Record<Urgency, string> = {
   High: "bg-[#F43F5E] text-black",
 };
 
-const STATUS_COLORS: Record<CitizenReport["status"], string> = {
-  New: "#06B6D4",
-  "In Progress": "#FBBF24",
-  "On Review": "#A78BFA",
-  Resolved: "#10B981",
-};
-
-/* ----------------------------------------------------------- data types */
-
-interface CitizenReport {
-  ticket: string;
-  category: string;
-  tag: string;
-  tagColor: string;
-  district: string;
-  description: string;
-  urgency: string;
-  status: "New" | "In Progress" | "On Review" | "Resolved";
-  upvotes: number;
-  createdAt: number;
-  aiTag: string;
-  reporterEmail: string;
-  resolution?: string;
-  resolvedAt?: number;
-  storageId?: string | null;
-}
-
-function timeAgo(timestamp: number): string {
-  const minutes = Math.floor((Date.now() - timestamp) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 /* ------------------------------------------------------------------ page */
 
 export default function ReportPortal() {
@@ -87,18 +47,10 @@ export default function ReportPortal() {
   const { state: locatedState, busy: locating } = useLocation();
   const detectedPlace = placeFromCensusState(locatedState);
 
-  const liveIssues = useQuery(api.admin.listIssues);
-  const isAdmin = useQuery(api.admin.isAdmin);
   const getUploadUrl = useAction(api.admin.uploadUrl);
-  // Resolves every attached photo to a real URL in one round trip.
-  const imageUrls = useQuery(api.admin.imageUrls) ?? {};
   const submitIssue = useMutation(api.admin.submitIssue);
-  const upvoteIssue = useMutation(api.admin.upvoteIssue);
-  const resolveIssue = useMutation(api.admin.resolveIssue);
 
-  const [upvotedIds, setUpvotedIds] = useState<Set<string>>(new Set());
-  const [resolvingTicket, setResolvingTicket] = useState<string | null>(null);
-  const [resolutionNote, setResolutionNote] = useState("");
+  
 
   // Form state
   const [category, setCategory] = useState("");
@@ -116,8 +68,6 @@ export default function ReportPortal() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const reports: CitizenReport[] = liveIssues ?? [];
 
   // Revoke the previous object URL explicitly when a new file is picked, and
   // only clean up the live one on real unmount. Revoking inside an effect keyed
@@ -223,33 +173,6 @@ export default function ReportPortal() {
     }
   };
 
-  const handleUpvote = async (ticket: string) => {
-    if (upvotedIds.has(ticket)) return;
-    setUpvotedIds((previous) => new Set(previous).add(ticket));
-    try {
-      await upvoteIssue({ ticket });
-    } catch (error) {
-      // Roll the optimistic highlight back if the write failed.
-      setUpvotedIds((previous) => {
-        const next = new Set(previous);
-        next.delete(ticket);
-        return next;
-      });
-      console.error("Upvote failed:", error);
-    }
-  };
-
-  const handleResolve = async (ticket: string) => {
-    if (resolutionNote.trim().length < 4) return;
-    try {
-      await resolveIssue({ ticket, resolution: resolutionNote.trim() });
-      setResolvingTicket(null);
-      setResolutionNote("");
-    } catch (error) {
-      console.error("Resolve failed:", error);
-    }
-  };
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -257,14 +180,8 @@ export default function ReportPortal() {
           Citizen Engagement &amp; Grievance Portal
         </h1>
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
-            <span className="nb-chip bg-[#F43F5E] text-black">
-              <ShieldCheck className="size-3.5" strokeWidth={3} />
-              Admin Mode
-            </span>
-          )}
-          <span className="nb-chip bg-[var(--nb-surface-2)] text-[#06B6D4]">
-            {reports.length} Tickets Live
+          <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+            Submitted Reports Are Reviewed Privately
           </span>
         </div>
       </div>
@@ -312,7 +229,7 @@ export default function ReportPortal() {
         </motion.div>
       )}
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+      <div className="mt-5 mx-auto grid max-w-3xl grid-cols-1 items-start gap-4">
         {/* ------------------------------------------------------ form */}
         <form onSubmit={handleSubmit} className="nb-panel">
           <div className="nb-subpanel flex items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
@@ -523,158 +440,6 @@ export default function ReportPortal() {
           </div>
         </form>
 
-        {/* ------------------------------------------------------ feed */}
-        <section className="nb-panel">
-          <div className="nb-subpanel flex flex-wrap items-center justify-between gap-3 border-b-2 border-[var(--nb-ink)] p-4">
-            <h2 className="nb-title text-xs leading-snug md:text-sm">
-              Community Public Live Feed &amp; Status Tracker
-            </h2>
-            <span className="nb-chip bg-[var(--nb-surface-2)] text-[#06B6D4]">
-              <span className="size-2 animate-pulse bg-[#06B6D4]" />
-              Live
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-3 p-4">
-            {reports.length === 0 && (
-              <p className="border-2 border-dashed border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-6 text-center text-xs font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
-                No tickets filed yet. Be the first to report an issue.
-              </p>
-            )}
-            {reports.map((report) => (
-              <motion.article
-                key={report.ticket}
-                layout
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22 }}
-                className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="nb-chip bg-[#F8FAFC] text-black">
-                    {report.ticket}
-                  </span>
-                  <span
-                    className="nb-chip"
-                    style={{
-                      background: STATUS_COLORS[report.status],
-                      color: "#000000",
-                    }}
-                  >
-                    {report.status}
-                  </span>
-                  <span
-                    className="nb-chip"
-                    style={{ background: report.tagColor, color: "#000000" }}
-                  >
-                    {report.tag}
-                  </span>
-                  <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                    {timeAgo(report.createdAt)}
-                  </span>
-                </div>
-
-                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
-                  {report.description}
-                </p>
-
-                {/* Attached photo, resolved from Convex file storage. */}
-                {report.storageId && imageUrls[report.storageId] && (
-                  <a
-                    href={imageUrls[report.storageId]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 block border-2 border-[var(--nb-ink)]"
-                  >
-                    <img
-                      src={imageUrls[report.storageId]}
-                      alt={`Photo attached to ${report.ticket}`}
-                      loading="lazy"
-                      className="max-h-72 w-full bg-[var(--nb-bg)] object-cover"
-                    />
-                  </a>
-                )}
-
-                {report.resolution && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-2 border-[var(--nb-ink)] bg-[#10B981] p-2.5">
-                    <Check className="size-4 shrink-0 text-[#04110C]" strokeWidth={4} />
-                    <span className="text-xs font-bold leading-relaxed text-[#04110C]">
-                      {report.resolution}
-                    </span>
-                  </div>
-                )}
-
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t-2 border-[var(--nb-ink)] pt-3">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-muted)]">
-                    {report.district}
-                  </span>
-                  <span className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-2)]">
-                    {report.urgency} Priority
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleUpvote(report.ticket)}
-                    aria-label={`Upvote ${report.ticket}`}
-                    className={[
-                      "nb-btn px-3 py-1.5 text-xs tabular-nums",
-                      upvotedIds.has(report.ticket)
-                        ? "bg-[#10B981] text-[#04110C]"
-                        : "ml-auto bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]",
-                    ].join(" ")}
-                  >
-                    <ChevronUp className="size-4" strokeWidth={3} />
-                    {report.upvotes}
-                  </button>
-                </div>
-
-                {isAdmin && report.status !== "Resolved" && (
-                  <div className="mt-3 border-t-2 border-[var(--nb-ink)] pt-3">
-                    {resolvingTicket === report.ticket ? (
-                      <div className="flex flex-col gap-2">
-                        <input
-                          className="nb-field"
-                          value={resolutionNote}
-                          onChange={(event) => setResolutionNote(event.target.value)}
-                          placeholder="Describe the resolution…"
-                          aria-label={`Resolution for ${report.ticket}`}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleResolve(report.ticket)}
-                            className="nb-btn flex-1 justify-center bg-[#10B981] py-2 text-[#04110C]"
-                          >
-                            <Check className="size-4" strokeWidth={3} />
-                            Confirm Resolve
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setResolvingTicket(null);
-                              setResolutionNote("");
-                            }}
-                            className="nb-btn justify-center bg-[var(--nb-surface-2)] px-3 py-2 text-[var(--nb-text-2)]"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setResolvingTicket(report.ticket)}
-                        className="nb-btn w-full justify-center bg-[#F43F5E] py-2 text-black"
-                      >
-                        <Wrench className="size-4" strokeWidth={3} />
-                        Resolve Ticket
-                      </button>
-                    )}
-                  </div>
-                )}
-              </motion.article>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   );

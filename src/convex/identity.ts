@@ -32,7 +32,7 @@ export function normaliseEmail(email: string | undefined | null): string {
  * means access survives that. To remove the owner, delete the entry here and
  * deploy — that is the only way to revoke it.
  */
-const SEED_ADMIN_EMAILS = ["makerspace802@gmail.com"];
+const SEED_ADMIN_EMAILS = ["makpratyushdhote20@gmail.com"];
 
 function isSeedAdmin(key: string): boolean {
   return SEED_ADMIN_EMAILS.some((e) => e.toLowerCase() === key);

@@ -476,16 +476,115 @@ check("a stored location keeps the chosen state and the landmark", () => {
   assert.equal(kb.locationLabel("Kerala", "  Marine Drive  "), "Kerala — Marine Drive");
 });
 
-check("the dashboard no longer hard-codes a four-tag colour table", () => {
-  const source = codeOnly("src/pages/CommandCenter.tsx");
+check("the ticket chip still reads the ticket's own colour, wherever it lives", () => {
+  // This check moved with the ticket UI: the public dashboard feed was removed
+  // and the admin desk on the profile page is now the only place a ticket is
+  // rendered. The original bug — a hard-coded four-tag table greying out every
+  // category added later — must not simply reappear in the new file.
+  const dashboard = codeOnly("src/pages/CommandCenter.tsx");
+  const desk = codeOnly("src/components/AdminTicketDesk.tsx");
+
   assert.ok(
-    !source.includes("TAG_COLORS"),
-    "CommandCenter still maps tags to colours itself, so new categories render grey",
+    !dashboard.includes("TAG_COLORS"),
+    "CommandCenter still maps tags to colours itself",
   );
   assert.ok(
-    source.includes("issue.tagColor"),
+    !dashboard.includes("listIssues"),
+    "the public dashboard must not query the ticket feed any more",
+  );
+  assert.ok(
+    !desk.includes("TAG_COLORS"),
+    "AdminTicketDesk still maps tags to colours itself, so new categories render grey",
+  );
+  assert.ok(
+    desk.includes("report.tagColor"),
     "the ticket's own colour should drive the chip",
   );
+});
+
+check("reports are private: no public feed, and the desk is admin-gated twice", () => {
+  // Reports name a place and can carry a photo of it, so the feed that used to
+  // sit on the public portal is gone. The replacement is admin-only both in the
+  // UI (rendered only behind isAdmin on the profile page) and on the server.
+  const portal = codeOnly("src/pages/ReportPortal.tsx");
+  assert.ok(
+    !portal.includes("listIssues") && !portal.includes("imageUrls"),
+    "the report portal must not read or render any ticket feed",
+  );
+  assert.ok(
+    !portal.includes("resolveIssue") && !portal.includes("Resolve Ticket"),
+    "resolve controls must not be reachable from the public portal",
+  );
+
+  const server = codeOnly("src/convex/admin.ts");
+  for (const fn of ["listAllIssues", "adminImageUrls"]) {
+    const body = server.slice(server.indexOf(`export const ${fn}`));
+    const start = body.indexOf("handler");
+    assert.ok(
+      body.slice(start, start + 220).includes("requireAdminEmail"),
+      `${fn} must call requireAdminEmail in its handler, not just in the UI`,
+    );
+  }
+  assert.ok(
+    server.includes("purgeAllIssues"),
+    "the wipe used to clear the table should remain available to an admin",
+  );
+
+  // And the desk must only ever be mounted from the admin-gated branch.
+  const profile = codeOnly("src/pages/Dashboard.tsx");
+  assert.match(
+    profile,
+    /\{isAdmin && <AdminTicketDesk \/>\}/,
+    "the ticket desk must be mounted only behind the isAdmin gate",
+  );
+});
+
+check("the previous seed admin has been revoked", () => {
+  const identity = readFileSync("src/convex/identity.ts", "utf8");
+  assert.ok(
+    !identity.includes("makerspace802@gmail.com"),
+    "the revoked admin is still seeded in identity.ts",
+  );
+  assert.ok(
+    /SEED_ADMIN_EMAILS = \["makpratyushdhote20@gmail\.com"\]/.test(identity),
+    "the replacement admin is not the only seeded address",
+  );
+  // A seed list with a space in the address can never match a real account.
+  const seeds = identity.match(/SEED_ADMIN_EMAILS = \[([^\]]*)\]/)[1];
+  for (const email of seeds.match(/"([^"]+)"/g).map((e) => e.slice(1, -1))) {
+    assert.ok(
+      !/\s/.test(email) && email.includes("@"),
+      `"${email}" is not a usable email address`,
+    );
+  }
+});
+
+check("the bot no longer promises a public feed", () => {
+  for (const question of ["how do i report an issue", "what pages are on this site"]) {
+    const reply = kb.ask(question);
+    assert.ok(!reply.declined, `refused "${question}"`);
+    assert.ok(
+      // A statement that reports are *not* published is the point, so match
+      // only affirmative claims that a report is visible to everyone.
+      !/(appears? in the public|anyone can upvote|is published on a public|visible to everyone)/i.test(
+        reply.text,
+      ),
+      `the bot still tells visitors their report is published: ${reply.text.slice(0, 120)}`,
+    );
+    assert.ok(
+      /not published|privately|read privately/i.test(reply.text),
+      `the bot should say reports are private: ${reply.text.slice(0, 120)}`,
+    );
+  }
+  // And the route blurb must not advertise tracking an upvote count either.
+  for (const page of kb.SITE_PAGES) {
+    if (page.route === "/report") {
+      assert.ok(
+        !/track the ticket/i.test(page.blurb),
+        "the report page still advertises public ticket tracking",
+      );
+    }
+  }
 });
 
 /* ==================================================================== 4.

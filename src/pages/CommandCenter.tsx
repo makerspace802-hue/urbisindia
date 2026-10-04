@@ -1,6 +1,5 @@
 import CensusCharts from "@/components/CensusCharts";
 import { Reveal, SlotValue } from "@/components/Retro";
-import { api } from "@/convex/_generated/api";
 import {
   CENTURY_MULTIPLE,
   FIRST_CENSUS_YEAR,
@@ -11,10 +10,7 @@ import {
   OPENING_CENSUS,
   PEAK_DECADAL,
 } from "@/lib/censusData";
-import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { Megaphone } from "lucide-react";
-import { Link } from "react-router";
 
 /** Compact population formatting for the card values. */
 const compact = (v: number) =>
@@ -164,8 +160,7 @@ export default function CommandCenter() {
     year: "numeric",
   });
 
-  const allIssues = useQuery(api.admin.listIssues);
-  const recent = (allIssues ?? []).slice(0, 4);
+  
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
@@ -233,90 +228,6 @@ export default function CommandCenter() {
         ))}
         </div>
       </Reveal>
-
-      {/* Live citizen feed — real submissions only, no placeholder rows */}
-      <section className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="nb-title text-sm md:text-base">
-            Latest From The Community
-          </h2>
-          <Link
-            to="/report"
-            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]"
-          >
-            File An Issue
-          </Link>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {recent.length === 0 ? (
-            <div className="nb-panel flex flex-col items-center gap-3 border-2 border-dashed p-8 text-center md:col-span-2">
-              <Megaphone
-                className="size-7 text-[var(--nb-text-dim)]"
-                strokeWidth={2.5}
-              />
-              <p className="text-sm font-black uppercase tracking-wide text-[var(--nb-text)]">
-                No citizen reports yet
-              </p>
-              <p className="max-w-sm text-xs font-bold leading-relaxed text-[var(--nb-text-muted)]">
-                Nothing has been filed so far. Once residents start reporting
-                issues they will appear here live.
-              </p>
-              <Link
-                to="/report"
-                className="nb-btn bg-[#10B981] text-[#04110C]"
-              >
-                File The First Report
-              </Link>
-            </div>
-          ) : (
-            recent.map((issue) => (
-              <motion.article
-                key={issue.ticket}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-40px" }}
-                transition={{ duration: 0.25 }}
-                className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text)]">
-                    {issue.ticket}
-                  </span>
-                  <span
-                    className="nb-chip"
-                    style={{
-                      // The colour is stored with the ticket, so a category added
-                      // to the portal shows its own accent here. The old lookup
-                      // table hard-coded four tags and greyed out everything else.
-                      background: issue.tagColor || "#94A3B8",
-                      color: "#000000",
-                    }}
-                  >
-                    {issue.tag}
-                  </span>
-                  <span
-                    className="nb-chip ml-auto"
-                    style={{
-                      background:
-                        issue.status === "Resolved" ? "#10B981" : "#FBBF24",
-                      color: "#000000",
-                    }}
-                  >
-                    {issue.status}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm font-semibold leading-relaxed text-[var(--nb-text-2)]">
-                  {issue.description}
-                </p>
-                <p className="mt-3 border-t-2 border-[var(--nb-ink)] pt-2 text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                  {issue.district} · {issue.upvotes} upvotes
-                </p>
-              </motion.article>
-            ))
-          )}
-        </div>
-      </section>
 
       {/* Census decade view, replacing the retired digital-twin map */}
       <section className="mt-8">

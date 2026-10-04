@@ -1,3 +1,4 @@
+import AdminTicketDesk from "@/components/AdminTicketDesk";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "convex/react";
@@ -162,6 +163,13 @@ export default function Dashboard() {
               )}
             </div>
           </section>
+
+          {/* Admin-only ticket review. The public feed on the report portal was
+              removed, so this is the one place reports can be read and
+              resolved — reachable only through this page, and only for an
+              admin. `isAdmin` is a Convex query, so it stays undefined until it
+              resolves and the desk never flashes for a non-admin. */}
+          {isAdmin && <AdminTicketDesk />}
 
           {/* Shortcuts */}
           <section className="nb-panel p-4">

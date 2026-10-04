@@ -97,14 +97,17 @@ export const uploadUrl = action({
 });
 
 /**
- * Resolves stored images to URLs for the public report feed.
+ * Resolves stored images to URLs for the admin ticket desk.
  *
  * Returns a map keyed by storage id so the client can render every attachment
- * with a single query instead of one request per ticket.
+ * with a single query instead of one request per ticket. Admin-only for the
+ * same reason as `listAllIssues`: an attached photo shows the exact spot a
+ * resident complained about.
  */
-export const imageUrls = query({
+export const adminImageUrls = query({
   args: {},
   handler: async (ctx) => {
+    await requireAdminEmail(ctx);
     const rows = await ctx.db
       .query("issues")
       .withIndex("by_created_at")
@@ -132,10 +135,18 @@ export const imageUrls = query({
   },
 });
 
-/** Public feed backing the /report portal. */
-export const listIssues = query({
+/**
+ * Every filed report, for the admin desk on the profile page.
+ *
+ * Admin-only and enforced here rather than in the client. The public
+ * `listIssues` feed was removed so reports stop being world-readable; this
+ * query is the replacement, and it returns the same rows plus the reporter's
+ * own address, which is only ever shown to an admin.
+ */
+export const listAllIssues = query({
   args: {},
   handler: async (ctx) => {
+    await requireAdminEmail(ctx);
     const rows = await ctx.db.query("issues").order("desc").take(200);
     return rows.map((row) => ({
       ticket: row.ticket,
@@ -259,8 +270,39 @@ export const upvoteIssue = mutation({
 });
 
 /**
+ * Admin-only: delete every filed report.
+ *
+ * A deliberate wipe, not a per-ticket delete, because the request was to clear
+ * the table. It also removes the attached blobs: leaving them would keep
+ * residents' photographs in storage after the reports they belonged to are
+ * gone. `requireAdminEmail` means this cannot be run by anyone else.
+ */
+export const purgeAllIssues = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdminEmail(ctx);
+    const rows = await ctx.db.query("issues").collect();
+
+    // Storage ids can outlive their blob, so a failed delete must not abort the
+    // whole purge and leave the table half-emptied.
+    for (const row of rows) {
+      if (typeof row.storageId === "string" && row.storageId.length > 0) {
+        try {
+          await ctx.storage.delete(row.storageId);
+        } catch {
+          // Blob already gone; the row still gets deleted below.
+        }
+      }
+    }
+
+    await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+    return { deleted: rows.length };
+  },
+});
+
+/**
  * Admin-only: close a ticket with a resolution note. The status change is
- * written to Convex so the public feed reflects it live.
+ * written to Convex so the admin desk reflects it live.
  */
 export const resolveIssue = mutation({
   args: {

@@ -108,7 +108,7 @@ export const SITE_PAGES: readonly SitePage[] = [
     route: "/",
     name: "Dashboard",
     blurb:
-      "India's population across all eleven censuses from 1901 to 2011, four headline cards, the latest citizen tickets, and four table views.",
+      "India's population across all eleven censuses from 1901 to 2011, four headline cards, and four table views.",
   },
   {
     route: "/analytics",
@@ -120,7 +120,7 @@ export const SITE_PAGES: readonly SitePage[] = [
     route: "/report",
     name: "Report Issue",
     blurb:
-      "File a civic complaint against one of 35 categories, attach a photo, track the ticket's status and upvotes, and see the public feed.",
+      "File a civic complaint against one of 35 categories, attach a photo, and get a ticket number back. Reports are read privately by the site administrator — they are not published.",
   },
   {
     route: "/quiz",
@@ -738,7 +738,7 @@ const INTENTS: readonly Intent[] = [
         `On Report Issue you file against one of ${REPORT_CATEGORIES.length} categories in ${REPORT_GROUPS.length} groups:\n\n` +
         REPORT_GROUPS.map((group) => `• ${group} — ${categoriesIn(group)}`).join("\n") +
         `\n\nYou pick your state or union territory — all ${REPORT_PLACES.length} are offered — and optionally add a landmark, set an urgency, and attach a photo. ` +
-        `You get a ticket number, and the ticket appears in the public feed where anyone can upvote it.`,
+        `You get a ticket number back straight away. Your report is read privately by the site administrator — it is not published on a public feed.`,
       suggestions: [
         "How many states can I file against?",
         "Do I need an account to report?",
