@@ -1,100 +1,101 @@
 /**
- * The diverging colour scale behind the Census heatmaps.
+ * The heatmap scale behind the Census tables.
  *
- * This exists because the original was illegible in light mode. It painted
- * `rgba(16,185,129, 0.22 → 1)` — an alpha wash — and then put hard-coded white
- * text on top. Against the light page background the palest wash composites to
- * rgb(184,225,217), so the figure inside it was **1.42:1**. Even at full
- * opacity the green is only **2.54:1**, because the brand green is itself a
- * light colour. Dark mode hid the problem: the dark page made every wash dark
- * enough to carry white text, which is why it only showed up once light mode
- * was switched on.
+ * This is the second rebuild. The first used an alpha wash under hard-coded
+ * white text, which put the figure at **1.42:1** in light mode — invisible, and
+ * the complaint that started it. The second used solid fills with a per-cell
+ * text colour picked from luminance. That was legible in both themes, but it
+ * was rejected as ugly: a large saturated slab behind small bold digits reads
+ * as poster paint, and it only ever looked deliberate in one theme.
  *
- * The fix is to stop compositing against an unknown background. Every step is
- * now a solid colour, so the cell looks the same on either theme, and the text
- * colour is chosen per cell from that colour's own luminance. The worst pairing
- * anywhere on the scale is 4.70:1, which clears WCAG AA for normal text.
+ * What ships now carries intensity in a *tint* — a low-alpha wash over the card
+ * surface — while the figure itself is painted in the accent's own colour. The
+ * numerals stay crisp against the panel instead of sitting on a block, and each
+ * theme picks the tone that reads on its own background: deep green on white in
+ * light mode, neon on navy in dark.
+ *
+ * Colours live in `index.css`, not here. That is deliberate — choosing them in
+ * JS would mean guessing which theme is active, and the whole point is that
+ * the two themes do not share a tone.
  *
  * Still a diverging scale, not a good/bad one: green is "more", red is "less".
  * Nothing here claims a shrinking population is a bad outcome — only that it
  * moved one way.
  */
 
-/** Reads like ink against a pale fill; used for the light end of the ramp. */
-export const HEAT_INK = "#0B0F17";
-/** Reads against a saturated fill; used for the dark end. */
-export const HEAT_PAPER = "#FFFFFF";
-
-/** Five solid steps per direction, lightest first. */
-const GAIN_RAMP = ["#A7F3D0", "#6EE7B7", "#34D399", "#059669", "#047857"] as const;
-const LOSS_RAMP = ["#FECDD3", "#FDA4AF", "#FB7185", "#E11D48", "#BE123C"] as const;
-/** Blank cells and zero-change rows. Passes AA against white. */
-export const HEAT_NEUTRAL = "#64748B";
-
 export interface HeatFill {
-  background: string;
-  /** Text colour that clears AA against `background`. */
-  color: string;
+  /** Class name carrying the tint and the figure colour. */
+  className: string;
+  /** 1 smallest magnitude to 4 largest; 0 when there is no figure. */
+  step: number;
+  direction: "gain" | "loss" | "none";
 }
 
-function channels(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  return [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
+/** Number of tint steps either side of neutral. */
+export const HEAT_STEPS = 4;
+
+function stepIndex(value: number, max: number): number {
+  if (!Number.isFinite(max) || max === 0) return 1;
+  const magnitude = Math.min(1, Math.abs(value) / max);
+  const index = Math.floor(magnitude * HEAT_STEPS) + 1;
+  return Math.min(HEAT_STEPS, Math.max(1, index));
 }
 
-/** WCAG relative luminance. */
+/**
+ * Tint and figure colour for one cell.
+ *
+ * `null` means "no census this decade", which is a different statement from
+ * "no change" and gets the neutral cell either way.
+ */
+export function heatFill(value: number | null, max: number): HeatFill {
+  if (value === null || value === 0 || !Number.isFinite(value)) {
+    return { className: "heat-none", step: 0, direction: "none" };
+  }
+  const direction = value > 0 ? "gain" : "loss";
+  const step = stepIndex(value, max);
+  return { className: `heat-${direction}-${step}`, step, direction };
+}
+
+/* ---------------------------------------------------------- contrast maths */
+
+/**
+ * WCAG relative luminance and contrast, kept because the cell colours are
+ * verified with them. The app does not use these to pick a colour at runtime —
+ * CSS does that per theme — but a change to the stylesheet that drops a cell
+ * below AA should fail a check rather than reach a screen.
+ */
 export function relativeLuminance(hex: string): number {
-  const [r, g, b] = channels(hex).map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const h = hex.replace("#", "");
+  const channel = (i: number) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return (
+    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  );
 }
 
-/** WCAG contrast ratio between two hex colours. */
 export function contrastRatio(a: string, b: string): number {
   const la = relativeLuminance(a);
   const lb = relativeLuminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-/**
- * Pick whichever of ink/paper reads better on `fill`.
- *
- * Threshold rather than "always the higher ratio" so the choice is stable and
- * obvious rather than flipping on a near-tie.
- */
-export function textFor(fill: string): string {
-  return contrastRatio(fill, HEAT_INK) >= contrastRatio(fill, HEAT_PAPER)
-    ? HEAT_INK
-    : HEAT_PAPER;
-}
-
-/** Pick a step on the ramp for a signed magnitude. */
-function stepFor(value: number, max: number, ramp: readonly string[]): string {
-  if (!Number.isFinite(max) || max === 0) return HEAT_NEUTRAL;
-  const magnitude = Math.min(1, Math.abs(value) / max);
-  // Index into the ramp; magnitude 0 lands on the palest step.
-  const index = Math.min(ramp.length - 1, Math.floor(magnitude * ramp.length));
-  return ramp[index];
-}
-
-/**
- * Fill and text colour for one cell.
- *
- * `null` means "no census this decade", which is a different statement from
- * "no change" and gets the neutral grey either way.
- */
-export function heatFill(value: number | null, max: number): HeatFill {
-  const fill =
-    value === null || value === 0 || !Number.isFinite(value)
-      ? HEAT_NEUTRAL
-      : value > 0
-        ? stepFor(value, max, GAIN_RAMP)
-        : stepFor(value, max, LOSS_RAMP);
-  return { background: fill, color: textFor(fill) };
+/** Composite an `rgba()` tint over a solid background, as the browser would. */
+export function composite(
+  rgba: string,
+  background: string,
+): string {
+  const match = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/.exec(rgba);
+  const bg = background.replace("#", "");
+  const to = (i: number) => parseInt(bg.slice(i, i + 2), 16);
+  if (!match) return background;
+  const alpha = match[4] === undefined ? 1 : Number(match[4]);
+  const mixed = [0, 1, 2].map((i) =>
+    Math.round(Number(match[i + 1]) * alpha + to(i * 2) * (1 - alpha)),
+  );
+  return (
+    "#" +
+    mixed.map((v) => v.toString(16).padStart(2, "0")).join("")
+  );
 }

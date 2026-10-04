@@ -1,7 +1,7 @@
 import { RetroMarquee, RetroSwitcher } from "@/components/Retro";
 import { LocationPulse } from "@/components/LocationPulse";
 import { PLACE_FALLBACK } from "@/lib/geo";
-import { heatFill, HEAT_NEUTRAL } from "@/lib/heatScale";
+import { heatFill } from "@/lib/heatScale";
 import { useLocation } from "@/lib/locationContext";
 import {
   COMMUTE,
@@ -16,9 +16,18 @@ import {
 import { motion } from "framer-motion";
 import { useState } from "react";
 
-const GAIN = "#10B981";
-const LOSS = "#F43F5E";
-const NEUTRAL = HEAT_NEUTRAL;
+/*
+ * Bar and inline-figure colours.
+ *
+ * These were literals. As *fills* that was fine, but the same values were also
+ * printed as text in the summary paragraphs and the card footers, where
+ * #FBBF24 measures 1.67:1 on the white card and is effectively invisible.
+ * They are now theme tokens: neon on the navy panel, a legible dark step on
+ * white. Same hues, both modes readable.
+ */
+const GAIN = "var(--nb-gain)";
+const LOSS = "var(--nb-loss)";
+const NEUTRAL = "var(--nb-text-dim)";
 
 type View = "decadal" | "place" | "people" | "commute";
 
@@ -71,11 +80,9 @@ function Cell({
   return (
     <div
       title={label}
-      className="flex h-7 items-center justify-center border text-[10px] font-black tabular-nums"
+      className={`${fill.className} flex h-7 items-center justify-center border text-[11px] font-black tabular-nums`}
       style={{
-        backgroundColor: fill.background,
-        color: fill.color,
-        borderColor: highlight ? "#FBBF24" : "var(--nb-ink)",
+        borderColor: highlight ? "var(--nb-warn)" : "var(--nb-line)",
         borderWidth: highlight ? 2 : 1,
       }}
     >
@@ -91,21 +98,21 @@ function Legend() {
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-[var(--nb-ink)] pt-2.5 text-[10px] font-black uppercase tracking-wide">
       <span className="flex items-center gap-1.5">
         <span
-          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
-          style={{ backgroundColor: heatFill(1, 1).background }}
+          className="inline-block h-3 w-3 border border-[var(--nb-line)]"
+          style={{ backgroundColor: GAIN }}
         />
         gain
       </span>
       <span className="flex items-center gap-1.5">
         <span
-          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
-          style={{ backgroundColor: heatFill(-1, 1).background }}
+          className="inline-block h-3 w-3 border border-[var(--nb-line)]"
+          style={{ backgroundColor: LOSS }}
         />
         loss
       </span>
       <span className="flex items-center gap-1.5">
         <span
-          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
+          className="inline-block h-3 w-3 border border-[var(--nb-line)]"
           style={{ backgroundColor: NEUTRAL }}
         />
         no figure / not applicable
@@ -147,7 +154,7 @@ function DecadalGrid({ place }: { place: string | null }) {
             {DECADAL_LABELS.map((label) => (
               <div
                 key={label}
-                className="pb-1 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
+                className="bg-[var(--nb-table-head)] py-0.5 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
               >
                 {label}
               </div>
@@ -161,10 +168,12 @@ function DecadalGrid({ place }: { place: string | null }) {
                   its state while the decades scroll under it.
                 */}
                 <div
-                  className="sticky left-0 z-10 flex items-center justify-end gap-1.5 bg-[var(--nb-surface)] pr-2 text-right text-[10px] font-black uppercase tracking-tight"
+                  className="sticky left-0 z-10 flex items-center justify-end gap-1.5 bg-[var(--nb-table-row)] pr-2 text-right text-[10px] font-black uppercase tracking-tight"
                   style={{
                     color:
-                      place && state.name === place ? "#FBBF24" : "var(--nb-text-2)",
+                      place && state.name === place
+                        ? "var(--nb-warn)"
+                        : "var(--nb-text-2)",
                     boxShadow: "2px 0 0 0 var(--nb-ink)",
                   }}
                 >
@@ -193,7 +202,7 @@ function DecadalGrid({ place }: { place: string | null }) {
       <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
         {statesWithLoss} of {STATE_DECADAL.length} states lost population in at
         least one decade — {lossCells} losses in total.{" "}
-        <span className="text-[#F43F5E]">
+        <span className="text-[var(--nb-loss)]">
           1911-21 was catastrophic, with {collapsed} states falling
         </span>{" "}
         and {worst.name} down {Math.abs(worst.c as number).toFixed(1)}% in{" "}
@@ -259,19 +268,19 @@ function Place({ place }: { place: string | null }) {
       <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
         {national ? (
           <>
-            <span className="text-[#10B981]">Urban India is {INDIA_SPATIAL.densityRatio}×
+            <span className="text-[var(--nb-gain)]">Urban India is {INDIA_SPATIAL.densityRatio}×
             denser than rural India</span> —{" "}
             {INDIA_SPATIAL.urbanDensity.toLocaleString("en-IN")} people per km² against{" "}
             {INDIA_SPATIAL.ruralDensity}. {INDIA_SPATIAL.towns.toLocaleString("en-IN")} towns
             hold the urban population. Meanwhile{" "}
-            <span className="text-[#F43F5E]">
+            <span className="text-[var(--nb-loss)]">
               {INDIA_SPATIAL.uninhabitedVillages.toLocaleString("en-IN")} villages stand empty
             </span>
             .
           </>
         ) : (
           <>
-            <span className="text-[#10B981]">
+            <span className="text-[var(--nb-gain)]">
               {local.name} is {(local.urbanPopulation / local.population * 100).toFixed(1)}% urban
             </span>{" "}
             against 31.1% nationally. Density{" "}
@@ -324,24 +333,24 @@ function People({ place }: { place: string | null }) {
         {local ? (
           <>
             In {local.name},{" "}
-            <span className="text-[#F43F5E]">
+            <span className="text-[var(--nb-loss)]">
               {local.illiterate.toLocaleString("en-IN")} people were recorded illiterate
             </span>{" "}
             against {local.literate.toLocaleString("en-IN")} literate — a{" "}
             {(local.illiterate / local.literate).toFixed(2)} to one gap. Literacy rate{" "}
-            <span className="text-[#10B981]">{local.literacyPercent.toFixed(2)}%</span>{" "}
+            <span className="text-[var(--nb-gain)]">{local.literacyPercent.toFixed(2)}%</span>{" "}
             against 72.98% nationally.
           </>
         ) : (
           <>
             {INDIA_SOCIAL.illiterate.toLocaleString("en-IN")} people were recorded
             illiterate against {INDIA_SOCIAL.literate.toLocaleString("en-IN")} literate — a{" "}
-            <span className="text-[#F43F5E]">
+            <span className="text-[var(--nb-loss)]">
               {(INDIA_SOCIAL.illiterate / INDIA_SOCIAL.literate).toFixed(2)} to one gap
             </span>
             . Sex ratio {INDIA_SOCIAL.sexRatio} per 1,000, child sex ratio{" "}
             {INDIA_SOCIAL.childSexRatio}.{" "}
-            <span className="text-[#10B981]">
+            <span className="text-[var(--nb-gain)]">
               Scheduled Tribe is {INDIA_2011.stSharePercent}% of the population
             </span>
             .
@@ -370,7 +379,7 @@ function CommuteGrid({ place }: { place: string | null }) {
             {COMMUTE_BANDS.map((band) => (
               <div
                 key={band}
-                className="pb-1 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
+                className="bg-[var(--nb-table-head)] py-0.5 text-center text-[9px] font-black uppercase tracking-tight text-[var(--nb-text-muted)]"
               >
                 {band}
               </div>
@@ -380,7 +389,7 @@ function CommuteGrid({ place }: { place: string | null }) {
                 {/* Sticky for the same reason as the decadal grid: the mode name
                     has to stay with its numbers on a narrow screen. */}
                 <div
-                  className="sticky left-0 z-10 flex items-center justify-end bg-[var(--nb-surface)] pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]"
+                  className="sticky left-0 z-10 flex items-center justify-end bg-[var(--nb-table-row)] pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]"
                   style={{ boxShadow: "2px 0 0 0 var(--nb-ink)" }}
                 >
                   {row.mode}
@@ -409,7 +418,7 @@ function CommuteGrid({ place }: { place: string | null }) {
         Table B-28 is published at India level only, so this view stays national{" "}
         {place ? <>even though you are browsing {place}</> : null}. The blank cells are
         real absences: nobody walks 31km to work.{" "}
-        <span className="text-[#F43F5E]">
+        <span className="text-[var(--nb-loss)]">
           &ldquo;No travel&rdquo; is {(((allModes?.values[0] ?? 0) / 1_000_000)).toFixed(1)} million
         </span>{" "}
         — but the source footnote says that bucket also captures not-reported. Walking
@@ -460,15 +469,28 @@ export default function CensusCharts() {
         </div>
       </div>
 
-      {geoState !== "located" && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <p className="nb-chip bg-[#FBBF24] text-[#1A1400]">
+      {/*
+        Always mounted. The banner collapses by animating `max-height` back to
+        zero rather than unmounting, which is the only way a height transition
+        has something to run against — and it stops the controls above jumping
+        a whole row when a fix finally lands.
+
+        The row is deliberately one line and scrolls sideways if it does not
+        fit. The alternative, wrapping, pushes the total height past the 40px
+        the transition targets and the banner clips its own retry button.
+      */}
+      <div
+        className={`nb-banner ${geoState === "located" ? "" : "mb-3"}`}
+        data-collapsed={geoState === "located" ? "true" : "false"}
+      >
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <p className="nb-chip shrink-0 bg-[#FBBF24] text-[#1A1400]">
             {geoState === "denied" || geoState === "unavailable"
               ? `Location unavailable — showing ${place ? place.toLowerCase() : "all India"}.`
               : "Locating you…"}
           </p>
           {approximate && geoState !== "requesting" && (
-            <p className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
+            <p className="nb-chip shrink-0 bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">
               Approximate — from your network, not GPS
             </p>
           )}
@@ -476,12 +498,12 @@ export default function CensusCharts() {
             type="button"
             onClick={() => request({ force: true })}
             disabled={busy}
-            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
+            className="nb-chip nb-shimmer nb-press shrink-0 bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
           >
             Retry with my location
           </button>
         </div>
-      )}
+      </div>
 
       <div className="mb-4">
         {/*

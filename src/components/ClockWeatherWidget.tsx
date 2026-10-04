@@ -1,14 +1,10 @@
 import { useSettings } from "@/components/SettingsProvider";
-import {
-  CONDITION,
-  detailFor,
-  fetchWeather,
-  type LiveWeather,
-} from "@/lib/weather";
+import { CONDITION, detailFor } from "@/lib/weather";
+import { loadWeather, useWeather } from "@/lib/weatherStore";
 import { useLocation } from "@/lib/locationContext";
 import { RefreshCw, Wind, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const POS_KEY = "urbis.widgetPos";
 
@@ -81,9 +77,18 @@ export default function ClockWeatherWidget() {
   const [now, setNow] = useState(() => new Date());
   const [expanded, setExpanded] = useState(false);
   const [pos, setPos] = useState(readPosition);
-  const [live, setLive] = useState<LiveWeather | null>(null);
-  const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+
+  /**
+   * The reading is shared.
+   *
+   * This component used to own the fetch and its own `live`/`busy` state. The
+   * header status bar also shows a temperature, so it now reads the same store
+   * — one request per location, and the two pills cannot show different
+   * numbers. This widget still owns when to refresh and the manual Refresh
+   * button; it just no longer owns the data.
+   */
+  const { live, busy } = useWeather();
 
   /**
    * The shared fix.
@@ -103,29 +108,17 @@ export default function ClockWeatherWidget() {
    * manual condition picker that used to sit here let the displayed state
    * disagree with the world, so it is gone.
    */
-  const load = useCallback(async (lat: number, lon: number) => {
-    setBusy(true);
-    try {
-      const reading = await fetchWeather(lat, lon);
-      setLive(reading);
-    } catch {
-      // Leave the last good reading on screen rather than blanking the widget.
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
   useEffect(() => {
     // The first fetch is deferred to a macrotask so the effect body itself never
-    // updates state. Calling `load()` directly would set `busy` synchronously
+    // updates state. Firing the fetch directly would set `busy` synchronously
     // during the effect, which cascades an extra render before anything is known.
-    const initial = setTimeout(() => void load(fix.lat, fix.lon), 0);
-    const id = setInterval(() => void load(fix.lat, fix.lon), 15 * 60_000);
+    const initial = setTimeout(() => void loadWeather(fix.lat, fix.lon), 0);
+    const id = setInterval(() => void loadWeather(fix.lat, fix.lon), 15 * 60_000);
     return () => {
       clearTimeout(initial);
       clearInterval(id);
     };
-  }, [load, fix.lat, fix.lon]);
+  }, [fix.lat, fix.lon]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -276,7 +269,7 @@ export default function ClockWeatherWidget() {
               </span>
               <button
                 type="button"
-                onClick={() => void load(fix.lat, fix.lon)}
+                onClick={() => void loadWeather(fix.lat, fix.lon)}
                 disabled={busy}
                 aria-label="Refresh weather"
                 className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"

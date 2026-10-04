@@ -1,16 +1,19 @@
 /**
  * Heatmap legibility.
  *
- * The Census heatmaps painted an alpha wash and put hard-coded white text on
- * top. In light mode the palest cell composited to rgb(184,225,217) and the
- * figure inside it sat at **1.42:1** — effectively invisible, which is what the
- * owner reported. Dark mode hid it: the dark page made every wash dark enough
- * to carry white text.
+ * This suite has been rewritten twice alongside the colour scheme, and each
+ * rewrite was because the previous one stopped describing what ships.
  *
- * So this checks the thing that was actually wrong — contrast — by computing
- * the WCAG ratio for every cell the app can render, against both theme
- * backgrounds. A future edit that reintroduces an alpha wash, or hard-codes a
- * text colour, fails here rather than on a phone in daylight.
+ *   v1  alpha wash under hard-coded white text — 1.42:1 in light mode.
+ *   v2  solid fills, per-cell text colour from luminance — legible, but a
+ *       saturated slab behind small digits, and it was rejected as ugly.
+ *   v3  a low-alpha tint plus a figure painted in the accent's own colour,
+ *       with each theme choosing the tone that reads on its own surface.
+ *
+ * Colours now live in `index.css`, so checking them means reading the
+ * stylesheet and compositing each tint over the surface it actually sits on.
+ * A step that drops below AA in either theme fails here rather than on a phone
+ * in daylight.
  *
  *   node scripts/test-heat.mjs
  */
@@ -36,8 +39,8 @@ buildSync({
 });
 
 const h = await import(`file://${out}?v=${Date.now()}`);
+const css = readFileSync("src/index.css", "utf8");
 
-/** WCAG AA for normal text. */
 const AA = 4.5;
 
 let passed = 0;
@@ -51,141 +54,192 @@ function check(name, fn) {
   }
 }
 
-check("every cell the app can render clears AA on its own fill", () => {
-  // Sweep the whole scale densely rather than sampling, so a bad step cannot
-  // hide between two chosen values.
-  let worst = Infinity;
-  let worstAt = null;
-  for (let i = 1; i <= 200; i++) {
-    const value = i / 10; // 0.1 .. 20
-    for (const sign of [1, -1]) {
-      const cell = h.heatFill(sign * value, 20);
-      const ratio = h.contrastRatio(cell.background, cell.color);
-      if (ratio < worst) {
-        worst = ratio;
-        worstAt = `${cell.background} with ${cell.color} at ${(sign * value).toFixed(1)}`;
+/** Pull one declaration out of a rule. `className` may be `dark .heat-gain-1`. */
+function declFor(className, property) {
+  const selector = className
+    .split(/\s+/)
+    .map((part) => `.${part.replace(/[.]/g, "\\.")}`)
+    .join("\\s+");
+  const rule = new RegExp(`${selector}\\s*\\{([^}]*)\\}`).exec(css);
+  assert.ok(rule, `no rule for "${className}" in index.css`);
+  const m = new RegExp(`${property}\\s*:\\s*([^;]+)`).exec(rule[1]);
+  assert.ok(m, `"${className}" has no ${property}`);
+  return m[1].trim();
+}
+
+/** Surfaces the cells actually sit on, per theme. */
+const LIGHT_SURFACE = "#ffffff";
+const DARK_SURFACE = "#131b2a";
+
+check("every cell step clears AA on both themes", () => {
+  for (const direction of ["gain", "loss"]) {
+    for (let step = 1; step <= h.HEAT_STEPS; step++) {
+      const cls = `heat-${direction}-${step}`;
+
+      // Light mode rule.
+      const lightBg = h.composite(declFor(cls, "background"), LIGHT_SURFACE);
+      const lightFg = declFor(cls, "color");
+      const lightRatio = h.contrastRatio(lightFg, lightBg);
+      assert.ok(
+        lightRatio >= AA,
+        `.${cls} in light mode is ${lightRatio.toFixed(2)}:1 ` +
+          `(${lightFg} on ${lightBg}), needs ${AA}:1`,
+      );
+
+      // Dark mode override.
+      const darkCls = `dark ${cls}`;
+      const darkBg = h.composite(declFor(darkCls, "background"), DARK_SURFACE);
+      const darkFg = declFor(darkCls, "color");
+      const darkRatio = h.contrastRatio(darkFg, darkBg);
+      assert.ok(
+        darkRatio >= AA,
+        `.${darkCls} is ${darkRatio.toFixed(2)}:1 ` +
+          `(${darkFg} on ${darkBg}), needs ${AA}:1`,
+      );
+    }
+  }
+});
+
+check("both themes are defined for every step", () => {
+  // A step that only exists in one theme is invisible in the other — the exact
+  // shape of the original bug, where light mode simply had no good colours.
+  for (const direction of ["gain", "loss"]) {
+    for (let step = 1; step <= h.HEAT_STEPS; step++) {
+      const cls = `heat-${direction}-${step}`;
+      assert.ok(css.includes(`.${cls} {`), `missing light rule .${cls}`);
+      assert.ok(css.includes(`.dark .${cls} {`), `missing dark rule .${cls}`);
+    }
+  }
+  assert.ok(css.includes(".heat-none {"), "the neutral cell is unstyled");
+});
+
+check("the tint is a wash, not a slab", () => {
+  // The reason v2 looked like poster paint: an opaque or near-opaque fill.
+  for (const direction of ["gain", "loss"]) {
+    for (let step = 1; step <= h.HEAT_STEPS; step++) {
+      for (const prefix of ["", ".dark "]) {
+        const bg = declFor(`${prefix}heat-${direction}-${step}`, "background");
+        const m = /rgba?\(([^)]+)\)/.exec(bg);
+        assert.ok(m, `heat-${direction}-${step} background is not a tint: ${bg}`);
+        const parts = m[1].split(",").map((s) => s.trim());
+        const alpha = parts.length === 4 ? Number(parts[3]) : 1;
+        assert.ok(
+          alpha <= 0.5,
+          `heat-${direction}-${step} tint is ${alpha}, too opaque to read as a tint`,
+        );
       }
     }
   }
-  assert.ok(
-    worst >= AA,
-    `worst cell is ${worst.toFixed(2)}:1 (${worstAt}), needs ${AA}:1`,
-  );
 });
 
-check("the old failure mode cannot come back", () => {
-  // The original was rgba(16,185,129,0.22) under white text, which composites
-  // to a pale mint on the light page. Recompute that exact case and assert it
-  // really was below AA — this is the regression being guarded against, and it
-  // is checked as arithmetic rather than remembered.
-  const channels = (hex) =>
-    [0, 2, 4].map((i) => parseInt(hex.replace("#", "").slice(i, i + 2), 16));
-  const composited = channels("#10B981").map((v, i) =>
-    Math.round(v * 0.22 + channels("#e8ecf2")[i] * 0.78),
-  );
-  const toHex = `rgb(${composited.join(",")})`;
-  // contrastRatio takes hex, so convert the composite back.
-  const asHex =
-    "#" +
-    composited
-      .map((v) => v.toString(16).padStart(2, "0"))
-      .join("");
-  const oldRatio = h.contrastRatio(asHex, "#FFFFFF");
-  assert.ok(
-    oldRatio < AA,
-    `the old wash now measures ${oldRatio.toFixed(2)}:1 — if that ever passes, ` +
-      "this check is measuring the wrong thing",
-  );
-  void toHex;
+check("cells map to real classes and the blank cell stays neutral", () => {
+  assert.equal(h.heatFill(null, 20).className, "heat-none");
+  assert.equal(h.heatFill(0, 20).className, "heat-none");
+  assert.equal(h.heatFill(NaN, 20).className, "heat-none");
+  assert.equal(h.heatFill(5, 20).direction, "gain");
+  assert.equal(h.heatFill(-5, 20).direction, "loss");
+  // A quarter of the maximum is a quarter of the way up the ramp, not the top
+  // of it: the top step belongs to the value that IS the maximum.
+  assert.equal(h.heatFill(5, 20).step, 2);
+  assert.equal(h.heatFill(20, 20).step, h.HEAT_STEPS);
+  assert.equal(h.heatFill(-20, 20).step, h.HEAT_STEPS);
 
-  // Every fill the module produces must be a SOLID six-digit hex. A `rgba()`
-  // or `rgb()` string here is the bug, so it is rejected outright.
-  for (const value of [-30, -12, -1, 0, null, 0.4, 9, 55]) {
-    const cell = h.heatFill(value, 55);
-    assert.match(
-      cell.background,
-      /^#[0-9A-Fa-f]{6}$/,
-      `fill for ${value} is not a solid hex: ${cell.background}`,
-    );
-    assert.match(
-      cell.color,
-      /^#[0-9A-Fa-f]{6}$/,
-      `text for ${value} is not a solid hex: ${cell.color}`,
-    );
+  // Every class the module can emit must exist in the stylesheet, or a cell
+  // renders with no background at all.
+  const emitted = new Set();
+  for (let v = -20; v <= 20; v += 0.5) {
+    emitted.add(h.heatFill(v, 20).className);
   }
-});
+  emitted.add(h.heatFill(null, 20).className);
+  for (const cls of emitted) {
+    assert.ok(css.includes(`.${cls}`), `.${cls} is emitted but never styled`);
+    // The neutral cell is the one exception: it resolves through theme tokens
+    // that are themselves redefined under `.dark`, so it needs no override of
+    // its own. Every tinted step does need one, or it renders light-on-light.
+    if (cls !== "heat-none") {
+      assert.ok(
+        css.includes(`.dark .${cls}`),
+        `.${cls} has no dark-theme rule, so it renders unstyled in dark mode`,
+      );
+    }
+  }
 
-check("cells read on either theme background", () => {
-  // A solid fill looks the same on both, but the theme must not change the
-  // ink/paper decision — otherwise dark mode flips every label's colour.
-  const light = h.heatFill(3, 10);
-  const dark = h.heatFill(3, 10);
-  assert.equal(light.color, dark.color, "the fill decision depends on the theme");
-  // And both themes' own text tokens must stay legible on their own background.
+  // The neutral cell must actually resolve differently per theme, or it would
+  // be the same grey on both backgrounds.
+  const neutralBg = declFor("heat-none", "background");
   assert.ok(
-    h.contrastRatio("#e8ecf2", "#1e293b") >= AA,
-    "light-mode body text is below AA",
+    /var\(--nb-surface-2\)/.test(neutralBg),
+    "the neutral cell should use a theme token, not a fixed colour",
   );
-  assert.ok(
-    h.contrastRatio("#0b0f17", "#e2e8f0") >= AA,
-    "dark-mode body text is below AA",
-  );
-});
+  const lightSurface = /--nb-surface-2:\s*([^;]+);/.exec(
+    css.slice(0, css.indexOf(".dark {")),
+  )[1].trim();
+  const darkSurface = /--nb-surface-2:\s*([^;]+);/.exec(
+    css.slice(css.indexOf(".dark {")),
+  )[1].trim();
+  assert.notEqual(lightSurface, darkSurface, "the neutral cell is identical in both themes");
 
-check("blank and zero cells read as neutral, not as a value", () => {
-  for (const value of [null, 0, NaN]) {
-    const cell = h.heatFill(value, 20);
-    assert.equal(
-      cell.background,
-      h.HEAT_NEUTRAL,
-      `${value} should be neutral, got ${cell.background}`,
-    );
+  // The token is itself redefined per theme, so resolve it the way the browser
+  // would rather than assuming one hex.
+  const tokenValue = (token, theme) => {
+    const scope = theme === "dark"
+      ? css.slice(css.indexOf(".dark {"))
+      : css.slice(0, css.indexOf(".dark {"));
+    const m = new RegExp(`--${token}:\\s*([^;]+);`).exec(scope);
+    assert.ok(m, `--${token} is not defined for the ${theme} theme`);
+    return m[1].trim();
+  };
+  for (const theme of ["light", "dark"]) {
+    const surface = theme === "dark" ? darkSurface : lightSurface;
+    const fg = tokenValue("nb-text-muted", theme);
+    const ratio = h.contrastRatio(fg, surface);
     assert.ok(
-      h.contrastRatio(cell.background, cell.color) >= AA,
-      `the blank cell is unreadable at ${value}`,
+      ratio >= AA,
+      `the neutral cell is ${ratio.toFixed(2)}:1 in ${theme} mode ` +
+        `(${fg} on ${surface}), needs ${AA}:1`,
     );
+  }
+
+  // Step must climb with magnitude and never leave 1..STEPS.
+  let previous = 0;
+  for (let v = 0.5; v <= 20; v += 0.25) {
+    const step = h.heatFill(v, 20).step;
+    assert.ok(step >= previous, "step went backwards as magnitude grew");
+    assert.ok(step >= 1 && step <= h.HEAT_STEPS, `step out of range: ${step}`);
+    previous = step;
   }
 });
 
-check("the chart no longer hard-codes white text or an alpha wash", () => {
+check("the chart uses the classes and never hard-codes a colour", () => {
   const source = readFileSync("src/components/CensusCharts.tsx", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/[^\n]*/g, "");
-  assert.ok(
-    !/text-white/.test(source),
-    "CensusCharts still hard-codes white text on the heat cells",
-  );
+  assert.ok(source.includes("fill.className"), "the cell is not using the scale class");
+  assert.ok(!/text-white/.test(source), "white text is hard-coded on the cells again");
   assert.ok(
     !/rgba\(16,185,129/.test(source),
-    "the old alpha wash is back in the chart",
+    "the old alpha wash is back inline in the chart",
   );
-  assert.ok(source.includes("heatFill"), "the chart is not using the tested scale");
-  // And the figure colour must come from the fill, not from a class.
-  assert.match(source, /color: fill\.color/, "the cell text colour is not derived from its fill");
+  assert.ok(
+    !/backgroundColor: fill\./.test(source),
+    "the cell is still painting a colour from JS instead of using the theme",
+  );
 });
 
 check("the mobile layout does not depend on a ticker for real content", () => {
   const source = readFileSync("src/components/CensusCharts.tsx", "utf8");
-  // Every stat must be reachable without the marquee animating, so the phone
-  // version gets a static list of the same figures.
   assert.match(
     source,
     /hidden sm:block[\s\S]{0,80}RetroMarquee/,
     "the marquee is not limited to wider screens",
   );
-  assert.match(
-    source,
-    /grid grid-cols-1 gap-2 sm:hidden/,
-    "no static replacement for the ticker on small screens",
-  );
-  // Both wide grids need to scroll deliberately, not blow out the viewport.
+  assert.match(source, /grid grid-cols-1 gap-2 sm:hidden/);
   const wide = source.match(/min-w-\[(\d+)px\]/g) ?? [];
   assert.ok(wide.length >= 2, "expected both tables to declare a minimum width");
   for (const rule of wide) {
-    const width = Number(/\d+/.exec(rule)[0]);
-    assert.ok(width <= 560, `${rule} is wider than a small phone needs`);
+    assert.ok(Number(/\d+/.exec(rule)[0]) <= 560, `${rule} is too wide for a phone`);
   }
-  assert.match(source, /sticky left-0/, "the row labels are not pinned while scrolling");
+  assert.match(source, /sticky left-0/, "row labels are not pinned while scrolling");
 });
 
 if (failures.length === 0) {

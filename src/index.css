@@ -81,27 +81,53 @@
 
   /* Neobrutalist surface tokens. Components reference these so a single
      class swap on <html> re-themes the whole app. */
-  --nb-bg: #e8ecf2;
+  --nb-bg: #eef1f6;
   --nb-surface: #ffffff;
-  --nb-surface-2: #d8dee9;
-  --nb-surface-hover: #c3ccdb;
-  --nb-text: #0b0f17;
+  --nb-surface-2: #e2e8f2;
+  --nb-surface-hover: #cbd5e5;
+  --nb-text: #0f172a;
   --nb-text-2: #1e293b;
   --nb-text-muted: #475569;
-  --nb-text-dim: #64748b;
+  --nb-text-dim: #556477;
   --nb-ink: #0b0f17;
   --nb-field-bg: #ffffff;
   --nb-field-inset: #94a3b8;
+
+  /* Census table skin.
+     One rule: anything that stays put while the table scrolls sits on the same
+     ground. The decade headings and the sticky label column are both fixed, so
+     both take `--nb-table-row`, and the scrolling cells stay on the plain card.
+     That is also what makes the gutter readable — painted in the card colour it
+     disappeared against the panel it scrolls over.
+
+     `--nb-line` is deliberately NOT `--nb-ink`: a 1px pure-black rule around
+     every cell was the harshest thing on the board and read as dirt on the
+     tints. This is a soft slate that separates cells without shouting. */
+  --nb-table-head: #eef1f6;
+  --nb-table-row: #eef1f6;
+  --nb-line: #a8b5c9;
+
+  /* Accents used as TEXT.
+
+     These were hard-coded as #10B981 / #FBBF24 / #06B6D4 everywhere. Measured
+     on the white card those are 2.54:1, 1.67:1 and 2.43:1 — the amber was
+     effectively invisible and the other two failed AA outright, which is what
+     made the light dashboard unreadable. These are the same hues pushed down to
+     a legible lightness (6.9:1 / 7.1:1 / 6.8:1 on the card). */
+  --nb-gain: #096744;
+  --nb-loss: #be123c;
+  --nb-warn: #7a5000;
+  --nb-cool: #0b6478;
 }
 
 .dark {
   --background: #0b0f17;
   --foreground: #e2e8f0;
-  --card: #1e293b;
+  --card: #131b2a;
   --card-foreground: #e2e8f0;
-  --popover: #1e293b;
+  --popover: #131b2a;
   --popover-foreground: #e2e8f0;
-  --primary: #10b981;
+  --primary: #00e5a3;
   --primary-foreground: #04110c;
   --secondary: #06b6d4;
   --secondary-foreground: #03151a;
@@ -113,12 +139,12 @@
   --border: #000000;
   --input: #000000;
   --ring: #10b981;
-  --chart-1: #10b981;
+  --chart-1: #00e5a3;
   --chart-2: #06b6d4;
   --chart-3: #f43f5e;
-  --chart-4: #fbbf24;
+  --chart-4: #ffc700;
   --chart-5: #a78bfa;
-  --sidebar: #111827;
+  --sidebar: #131b2a;
   --sidebar-foreground: #e2e8f0;
   --sidebar-primary: #10b981;
   --sidebar-primary-foreground: #04110c;
@@ -128,16 +154,38 @@
   --sidebar-ring: #10b981;
 
   --nb-bg: #0b0f17;
-  --nb-surface: #1e293b;
-  --nb-surface-2: #111827;
-  --nb-surface-hover: #334155;
+  --nb-surface: #131b2a;
+  --nb-surface-2: #1b2438;
+  --nb-surface-hover: #263349;
   --nb-text: #f8fafc;
   --nb-text-2: #e2e8f0;
   --nb-text-muted: #94a3b8;
-  --nb-text-dim: #64748b;
+  --nb-text-dim: #8494ab;
   --nb-ink: #000000;
   --nb-field-bg: #0b0f17;
   --nb-field-inset: #334155;
+
+  /* Dark table skin.
+     `--nb-surface-2` used to be byte-identical to `--nb-surface`, so every
+     sub-panel, the switcher rail, the help bot's bubbles and the blank heat
+     cells were all exactly the same navy as the card behind them — there was
+     no hierarchy to read, which is what made the dark table look flat and
+     muddy. It is now a genuinely lighter step, and `--nb-line` is a slate rule
+     rather than the pure black every cell used to be outlined in.
+
+     The fixed parts of the table sit *below* the panel rather than above it:
+     a frozen band should read as cut into the board, not painted on it. It is
+     also the only value that keeps every foreground here above 4.5:1 — a
+     lighter band drops `--nb-text-dim` to 4.28:1. */
+  --nb-table-head: #0f1622;
+  --nb-table-row: #0f1622;
+  --nb-line: #3a4a68;
+
+  /* Neon accents. Same names as light, tuned for the navy panel. */
+  --nb-gain: #00e5a3;
+  --nb-loss: #fb7185;
+  --nb-warn: #ffc700;
+  --nb-cool: #22d3ee;
 }
 
 @layer base {
@@ -413,6 +461,341 @@
     100% {
       opacity: 0;
     }
+  }
+
+  /* ---------------------------------------------------------------------
+     Motion kit for the dashboard.
+
+     Split by cost. Anything that loops animates ONLY `transform` and
+     `opacity`, so it runs on the compositor. Anything that repaints — a shadow
+     or a border colour — is triggered once by a hover and then left alone,
+     because a repeating shadow or border repaint costs a raster every frame.
+     --------------------------------------------------------------------- */
+
+  /* Brand glow. The halo is a separate layer toggled by opacity, so the wordmark
+     itself is never repainted; the pulse only runs while the pointer is on it. */
+  .nb-logo-glow {
+    position: relative;
+  }
+  .nb-logo-glow::after {
+    content: "";
+    position: absolute;
+    inset: -10px -14px;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(0, 229, 163, 0.35) 0%,
+      transparent 68%
+    );
+    transition: opacity 260ms ease;
+  }
+  .nb-logo-glow:hover::after {
+    opacity: 1;
+    animation: nb-logo-pulse 1.6s ease-in-out infinite;
+    /* Only while hovered, so the promotion does not outlive the effect. */
+    will-change: opacity;
+  }
+  @keyframes nb-logo-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Header tab rail. The underline is Framer's `layoutId="activeTab"` element,
+     so this only has to anchor it and own the background fade. */
+  .nb-nav-tab {
+    position: relative;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .nb-nav-underline {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 2px;
+    height: 3px;
+    pointer-events: none;
+  }
+
+  /* Metric card hover: lift, deepen the drop shadow, light the border up.
+     One-shot on hover, so the two repainting properties are fine here. */
+  .nb-card-lift {
+    transition:
+      transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1),
+      box-shadow 0.22s ease,
+      border-color 0.22s ease;
+  }
+  .nb-card-lift:hover {
+    transform: translateY(-4px);
+    border-color: var(--nb-gain);
+    box-shadow:
+      5px 5px 0 0 var(--nb-ink),
+      0 10px 30px -10px rgba(0, 229, 163, 0.2);
+  }
+
+  /* Press-in for the retry control. Transform only. */
+  .nb-press {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .nb-press:active {
+    transform: scale(0.95);
+  }
+
+  /* Assistant launcher ring. Also one-shot, on hover. */
+  .nb-ring-glow {
+    transition:
+      transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1),
+      box-shadow 0.2s ease;
+  }
+  .nb-ring-glow:hover {
+    box-shadow:
+      4px 4px 0 0 var(--nb-ink),
+      0 0 18px 2px rgba(0, 229, 163, 0.45);
+  }
+
+  /* Location alert. `max-height` is a layout property, so this is the one
+     animation here that is not compositor-only — it runs once, on a 40px box,
+     and gets its movement from the child instead of the container growing.
+
+     `visibility` is in the transition for a reason beyond looks: collapsing to
+     zero height hides the retry button but does not remove it, so it would
+     still take a tab stop and still be announced. The delayed switch keeps the
+     button visible while the box shrinks and drops it once the box is gone. */
+  .nb-banner {
+    max-height: 40px;
+    overflow: hidden;
+    visibility: visible;
+    transition:
+      max-height 0.3s ease,
+      opacity 0.3s ease,
+      visibility 0s linear 0s;
+  }
+  .nb-banner[data-collapsed="true"] {
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      max-height 0.3s ease,
+      opacity 0.3s ease,
+      visibility 0s linear 0.3s;
+  }
+}
+
+/* ==========================================================================
+   Census heatmap cells.
+
+   Rebuilt after the first version was rejected as looking like blocky poster
+   paint. The problem was structural, not a palette tweak: a large saturated
+   fill behind small bold digits fights the figure no matter which colour is
+   chosen, and it only ever looked right in one theme.
+
+   So intensity is carried by a *tint* — a low-alpha wash of the accent over
+   the card surface — while the figure itself is painted in the accent's own
+   colour. That keeps the numerals crisp against the panel instead of on top of
+   a slab, and it lets each theme pick the tone that reads on ITS background:
+   deep green on white in light mode, neon on navy in dark.
+
+   Step 1 is the smallest magnitude, step 4 the largest.
+   ========================================================================== */
+@layer components {
+  .heat-gain-1 { background: rgba(16, 185, 129, 0.12); color: #046c4a; }
+  .heat-gain-2 { background: rgba(16, 185, 129, 0.22); color: #065f46; }
+  .heat-gain-3 { background: rgba(16, 185, 129, 0.34); color: #064e3b; }
+  .heat-gain-4 { background: rgba(16, 185, 129, 0.48); color: #022c22; }
+
+  .heat-loss-1 { background: rgba(225, 29, 72, 0.10); color: #9f1239; }
+  .heat-loss-2 { background: rgba(225, 29, 72, 0.20); color: #881337; }
+  .heat-loss-3 { background: rgba(225, 29, 72, 0.32); color: #701a35; }
+  .heat-loss-4 { background: rgba(225, 29, 72, 0.46); color: #4c0519; }
+
+  /* The neutral cell. Uses `--nb-text-muted`, not `--nb-text-dim`: the dimmer
+     token measures 3.52:1 against the light card surface and 3.62:1 against
+     the dark one, so the blank cells — the ones a reader scans past looking
+     for a gap — were the least legible on the board in both themes. */
+.heat-none {
+    background: var(--nb-surface-2);
+    color: var(--nb-text-muted);
+  }
+
+  /* On the dark panel the same tints become glows, and the figure switches to
+     the neon accents so it stays legible without turning the cell into a
+     bright block. */
+  .dark .heat-gain-1 { background: rgba(0, 229, 163, 0.12); color: #5cf5c4; }
+  .dark .heat-gain-2 { background: rgba(0, 229, 163, 0.20); color: #3ff0b5; }
+  .dark .heat-gain-3 { background: rgba(0, 229, 163, 0.30); color: #3ff0b5; }
+  .dark .heat-gain-4 { background: rgba(0, 229, 163, 0.42); color: #a5fbe0; }
+
+  .dark .heat-loss-1 { background: rgba(244, 63, 94, 0.12); color: #fda4af; }
+  .dark .heat-loss-2 { background: rgba(244, 63, 94, 0.20); color: #ff8095; }
+  .dark .heat-loss-3 { background: rgba(244, 63, 94, 0.30); color: #ff9db0; }
+  .dark .heat-loss-4 { background: rgba(244, 63, 94, 0.42); color: #ffc2cd; }
+}
+
+/* ==========================================================================
+   Ambient page background.
+
+   A slow breathing radial glow in the top-right plus a fine mesh grid, both
+   fixed behind the content. Only `opacity` and `transform` are animated, so
+   the whole thing stays on the compositor and never triggers layout or paint.
+   ========================================================================== */
+.urbis-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.urbis-ambient::after {
+  content: "";
+  position: absolute;
+  top: -18vh;
+  right: -14vw;
+  width: 62vw;
+  height: 62vw;
+  border-radius: 50%;
+  /* The falloff is baked into the gradient instead of a `filter: blur()`.
+     Blurring a 62vw element is a full-screen raster on every frame the scale
+     changes; a gradient stops with a long tail looks the same and costs one
+     composited transform. */
+  background: radial-gradient(
+    circle,
+    rgba(0, 229, 163, 0.3) 0%,
+    rgba(0, 229, 163, 0.16) 28%,
+    rgba(0, 229, 163, 0.06) 50%,
+    transparent 72%
+  );
+  animation: nb-breathe 8s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes nb-breathe {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.08);
+  }
+}
+
+/* Neon status badge.
+   The halo lives on a pseudo-element whose box-shadow is painted exactly once;
+   only that element's `opacity` animates. Animating `box-shadow` directly —
+   which is what this did first — repaints the badge every frame, which is the
+   one thing a 2.4s infinite loop has no business doing. Same glow, no paint. */
+.nb-neon-tag {
+  position: relative;
+}
+
+.nb-neon-tag::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(255, 199, 0, 0.4);
+  animation: nb-tag-glow 2.4s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes nb-tag-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Looping shimmer across the "retry with my location" control. The sweep is a
+   transform on a pseudo-element, so it never triggers a repaint of the button
+   or the text sitting on it. */
+.nb-shimmer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.nb-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: nb-shimmer-sweep 3s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes nb-shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Idle float for the assistant launcher. */
+.nb-float {
+  animation: nb-float 3s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes nb-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .urbis-ambient::after,
+  .nb-neon-tag::after,
+  .nb-shimmer::after,
+  .nb-float,
+  .nb-logo-glow:hover::after {
+    animation: none !important;
+  }
+  /* With the loops stopped, each one still has to land somewhere legible
+     rather than frozen at its first frame's value. */
+  .urbis-ambient::after {
+    opacity: 0.22;
+  }
+  .nb-neon-tag::after {
+    opacity: 0.7;
+  }
+  .nb-logo-glow::after {
+    opacity: 0.5;
+  }
+  .nb-shimmer::after {
+    opacity: 0.5;
+  }
+  .nb-card-lift,
+  .nb-press,
+  .nb-ring-glow,
+  .nb-banner,
+  .nb-nav-tab {
+    transition: none !important;
   }
 }
 

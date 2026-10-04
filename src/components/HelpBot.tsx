@@ -4,7 +4,7 @@ import {
   STARTER_QUESTIONS,
   type HelpReply,
 } from "@/lib/helpKnowledge";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUp, CornerDownLeft, Sparkles, X } from "lucide-react";
 import {
   useCallback,
@@ -74,6 +74,15 @@ export default function HelpBot() {
   );
 
   const navigate = useNavigate();
+  const reduced = useReducedMotion();
+  /**
+   * Full turns of the launcher.
+   *
+   * Rotating by an ever-growing `spins * 360` rather than toggling between 0
+   * and 360 is what makes the icon turn the same way every time — flipping back
+   * to 0 would unwind it.
+   */
+  const [spins, setSpins] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +130,7 @@ export default function HelpBot() {
     if (!open && messages.length === 1) {
       setRevealing(reducedMotion ? null : { id: 0, shown: 0 });
     }
+    setSpins((turns) => turns + 1);
     setOpen(!open);
   }, [open, messages.length, reducedMotion]);
 
@@ -333,20 +343,34 @@ export default function HelpBot() {
         )}
       </AnimatePresence>
 
-      {/* Launcher — square, to match the flat-corner theme */}
+      {/*
+        Launcher — square, to match the flat-corner theme.
+
+        The idle float and the neon ring live on the button; the hover scale and
+        the click rotation live on the inner span. They have to be split: the
+        float is a CSS animation writing `transform` on the button, and a
+        `hover:scale-110` on that same element would be overwritten by it every
+        frame rather than combining with it.
+      */}
       <button
         type="button"
         onClick={toggle}
         aria-label={open ? "Close site help" : "Open site help"}
         aria-expanded={open}
         title="Ask about this site"
-        className="relative flex size-14 shrink-0 items-center justify-center border-2 border-[var(--nb-ink)] bg-[#10B981] shadow-[4px_4px_0_0_var(--nb-ink)] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--nb-ink)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0_0_var(--nb-ink)]"
+        className="nb-float nb-ring-glow group relative flex size-14 shrink-0 items-center justify-center border-2 border-[var(--nb-ink)] bg-[#10B981] shadow-[4px_4px_0_0_var(--nb-ink)]"
       >
-        {open ? (
-          <X className="size-6 text-[#04110C]" strokeWidth={3} />
-        ) : (
-          <img src={agentLogo} alt="" className="size-9" />
-        )}
+        <motion.span
+          animate={{ rotate: reduced ? 0 : spins * 360 }}
+          transition={reduced ? { duration: 0 } : { duration: 0.45, ease: "easeOut" }}
+          className="flex items-center justify-center transition-transform duration-200 ease-out group-hover:scale-110 active:scale-95 motion-reduce:transition-none"
+        >
+          {open ? (
+            <X className="size-6 text-[#04110C]" strokeWidth={3} />
+          ) : (
+            <img src={agentLogo} alt="" className="size-9" />
+          )}
+        </motion.span>
         {!open && (
           <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center border-2 border-[var(--nb-ink)] bg-[#FBBF24]">
             <CornerDownLeft className="size-2.5 text-black" strokeWidth={3} />

@@ -19,12 +19,15 @@ export function AppLayout() {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="relative flex min-h-screen flex-col bg-background">
+      {/* Ambient mesh + breathing glow. Fixed and non-interactive, so it sits
+          behind everything without affecting layout or hit-testing. */}
+      <div className="urbis-ambient" aria-hidden="true" />
       <AppHeader />
       <ClockWeatherWidget />
       <HelpBot />
 
-      <div className="flex-1">
+      <div className="relative z-10 flex-1">
         <AnimatePresence mode="wait" initial={false}>
           <motion.main
             key={location.pathname}

@@ -20,7 +20,7 @@ import {
   type MetricReading,
 } from "@/lib/dashboardPreferences";
 import { useQuery } from "convex/react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
@@ -28,12 +28,41 @@ import { useState } from "react";
 const compact = (v: number) =>
   v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v.toLocaleString("en-IN");
 
+/** Shared spring for the dashboard's entry animations. */
+const SPRING = { type: "spring" as const, stiffness: 300, damping: 25 };
+
+/**
+ * Badge fills.
+ *
+ * These stay literal on purpose — they are solid chips carrying near-black
+ * text, not text on a card, and a chip background has no contrast
+ * requirement of its own. What matters is that the badge never becomes a
+ * *foreground* colour elsewhere, which is what the accent tokens are for.
+ */
 const TONES = {
   cyan: "bg-[#06B6D4] text-[#03151A]",
   green: "bg-[#10B981] text-[#04110C]",
   amber: "bg-[#FBBF24] text-[#1A1400]",
   slate: "bg-[#64748B] text-white",
 } as const;
+
+/**
+ * Card entry.
+ *
+ * One shared definition so the two grids cannot drift: same 0.08s step, same
+ * 20px rise, same spring. `staggerChildren` is what produces the sequence —
+ * each child is given its own delay by the parent rather than each computing
+ * `index * 0.08` here.
+ */
+const GRID = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+
+const CARD_ENTRY = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: SPRING },
+};
 
 interface Card {
   key: string;
@@ -69,7 +98,7 @@ const CARDS: Card[] = [
     year: OPENING_CENSUS.year,
     footLeft: "opens the series",
     footRight: `${CENTURY_MULTIPLE}× by ${LAST_CENSUS_YEAR}`,
-    accent: "#06B6D4",
+    accent: "var(--nb-cool)",
   },
   {
     key: "closing",
@@ -81,7 +110,7 @@ const CARDS: Card[] = [
     year: LAST_CENSUS_YEAR,
     footLeft: `${compact(OPENING_CENSUS.population)} in ${FIRST_CENSUS_YEAR}`,
     footRight: `${CENTURY_MULTIPLE}× the century start`,
-    accent: "#10B981",
+    accent: "var(--nb-gain)",
   },
   {
     key: "peak",
@@ -93,7 +122,7 @@ const CARDS: Card[] = [
     year: PEAK_DECADAL.to,
     footLeft: `+${compact(PEAK_DECADAL.absoluteChange)} people`,
     footRight: "never repeated",
-    accent: "#FBBF24",
+    accent: "var(--nb-warn)",
   },
   {
     key: "latest",
@@ -105,7 +134,7 @@ const CARDS: Card[] = [
     year: LATEST_DECADAL.to,
     footLeft: `+${compact(LATEST_DECADAL.absoluteChange)} people`,
     footRight: "2nd largest ever",
-    accent: "#06B6D4",
+    accent: "var(--nb-cool)",
   },
 ];
 
@@ -117,6 +146,13 @@ const CARDS: Card[] = [
  * All four cards share the same curve, so they read as four views of one
  * century rather than four unrelated statistics — which is the difference
  * between a card about 2011 and a card about where 2011 sits in 110 years.
+ *
+ * The line draws itself with `stroke-dashoffset`. `pathLength={1}` normalises
+ * the geometry, so the dash is set to a single unit and animating the offset
+ * from 1 to 0 draws the whole polyline without ever measuring it — the
+ * alternative is reading `getTotalLength()` in an effect, which would mean a
+ * layout read on every card on every render. The endpoint marker pops in over
+ * the last 0.3s of that draw.
  */
 function CenturySpark({ year, accent }: { year: number; accent: string }) {
   const n = INDIA_DECADAL.length;
@@ -126,6 +162,21 @@ function CenturySpark({ year, accent }: { year: number; accent: string }) {
   const index = INDIA_DECADAL.findIndex((p) => p.year === year);
   const point = INDIA_DECADAL[index];
   const previous = INDIA_DECADAL[index - 1];
+  const reduced = useReducedMotion();
+  const draw = reduced
+    ? { initial: false as const, animate: { strokeDashoffset: 0 } }
+    : {
+        initial: { strokeDashoffset: 1 },
+        animate: { strokeDashoffset: 0 },
+        transition: { duration: 1.2, ease: "easeOut" as const },
+      };
+  const pop = reduced
+    ? { initial: false as const, animate: { scale: 1, opacity: 1 } }
+    : {
+        initial: { scale: 0, opacity: 0 },
+        animate: { scale: 1, opacity: 1 },
+        transition: { duration: 0.3, delay: 0.95, ease: "easeOut" as const },
+      };
 
   return (
     <svg
@@ -134,18 +185,26 @@ function CenturySpark({ year, accent }: { year: number; accent: string }) {
       role="img"
       aria-label={`India population ${FIRST_CENSUS_YEAR} to ${LAST_CENSUS_YEAR}, marking ${year}`}
     >
-      <line x1="6" y1="34" x2="90" y2="34" stroke="var(--nb-ink)" strokeWidth="2" />
-      <polyline
+      <line x1="6" y1="34" x2="90" y2="34" stroke="var(--nb-line)" strokeWidth="2" />
+      <motion.polyline
+        pathLength={1}
+        strokeDasharray="1"
+        strokeDashoffset={0}
+        {...draw}
         points={INDIA_DECADAL.map(
           (p, i) => `${x(i).toFixed(2)},${y(p.population).toFixed(2)}`,
         ).join(" ")}
         fill="none"
-        stroke="#334155"
+        stroke="var(--nb-line)"
         strokeWidth="2"
         strokeLinejoin="miter"
       />
       {previous && (
-        <polyline
+        <motion.polyline
+          pathLength={1}
+          strokeDasharray="1"
+          strokeDashoffset={0}
+          {...draw}
           points={`${x(index - 1).toFixed(2)},${y(previous.population).toFixed(2)} ${x(index).toFixed(2)},${y(point.population).toFixed(2)}`}
           fill="none"
           stroke={accent}
@@ -153,7 +212,11 @@ function CenturySpark({ year, accent }: { year: number; accent: string }) {
           strokeLinecap="square"
         />
       )}
-      <rect
+      <motion.rect
+        {...pop}
+        // `fill-box` makes the transform origin resolve against the marker's
+        // own box, so it scales out of itself rather than the SVG's corner.
+        style={{ transformBox: "fill-box", transformOrigin: "center" }}
         x={x(index) - 3}
         y={y(point.population) - 3}
         width="6"
@@ -252,14 +315,17 @@ export default function CommandCenter() {
               Census Of India · {LAST_CENSUS_YEAR}
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {readings.map((entry, index) => (
+          <motion.div
+            variants={GRID}
+            initial="hidden"
+            animate="show"
+            className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          >
+            {readings.map((entry) => (
               <motion.article
                 key={entry.id}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: index * 0.05 }}
-                className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
+                variants={CARD_ENTRY}
+                className="nb-panel nb-card-lift p-4"
               >
                 <h3 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[var(--nb-text-muted)]">
                   {entry.def.title}
@@ -276,7 +342,7 @@ export default function CommandCenter() {
                 </p>
               </motion.article>
             ))}
-          </div>
+          </motion.div>
         </section>
       )}
 
@@ -293,21 +359,24 @@ export default function CommandCenter() {
       </div>
 
       <Reveal>
-        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {CARDS.map((card, index) => (
+        <motion.div
+          variants={GRID}
+          initial="hidden"
+          animate="show"
+          className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+        {CARDS.map((card) => (
           <motion.article
             key={card.key}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: index * 0.05 }}
-            className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
+            variants={CARD_ENTRY}
+            className="nb-panel nb-card-lift p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[var(--nb-text-muted)]">
                 {card.title}
               </h2>
               <span
-                className={`nb-chip whitespace-normal text-right ${TONES[card.tone]}`}
+                className={`nb-chip nb-neon-tag whitespace-normal text-right ${TONES[card.tone]}`}
               >
                 {card.badge}
               </span>
@@ -337,7 +406,7 @@ export default function CommandCenter() {
             </div>
           </motion.article>
         ))}
-        </div>
+        </motion.div>
       </Reveal>
       </>
       )}

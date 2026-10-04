@@ -9,6 +9,7 @@ import { SettingsProvider } from "@/components/SettingsProvider";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
+import { MotionConfig } from "framer-motion";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
@@ -117,6 +118,16 @@ createRoot(document.getElementById("root")!).render(
         <SettingsProvider>
         <LocationProvider>
         <BrowserRouter>
+          {/*
+            `reducedMotion="user"` makes every Framer animation in the app
+            honour the OS setting, not just the handful of components that opt
+            in individually. Framer keeps opacity animations and collapses
+            transform and layout ones, so route cross-fades still read as
+            transitions while the card stagger, the value roll-up, the
+            sparkline draw and the gear rotation land instantly instead of
+            moving anyone who asked the page not to move.
+          */}
+          <MotionConfig reducedMotion="user">
           <RouteSyncer />
           <Suspense fallback={<RouteSkeleton />}>
             <Routes>
@@ -141,6 +152,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="*" element={<RouteBoundary label="page"><NotFound /></RouteBoundary>} />
             </Routes>
           </Suspense>
+          </MotionConfig>
         </BrowserRouter>
         <Toaster />
         </LocationProvider>

@@ -2,9 +2,27 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from "react";
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from "framer-motion";
+import { formatFigure, parseFigure } from "@/lib/countUp";
+
+/**
+ * Shared spring.
+ *
+ * The dashboard's entry animations, the value roll-up and the header underline
+ * all run on these numbers, so one interrupted animation always resumes with
+ * the same physics as any other.
+ */
+const SPRING = { type: "spring" as const, stiffness: 300, damping: 25 };
 
 /* ==========================================================================
    Block slide & swap
@@ -128,11 +146,17 @@ export function RetroMarquee({
    ========================================================================== */
 
 /**
- * Replays the vertical flip whenever the value changes.
+ * Card reading with a roll-up.
  *
- * The animation is driven by the key on the inner span rather than by
- * re-mounting through state: changing the key gives React a new element, which
- * restarts the CSS animation on its own.
+ * A numeric value counts from zero to its target on a spring the first time it
+ * appears, and keeps its source formatting throughout — `1,210.9M` counts up as
+ * "0.0M" … "1,210.9M" rather than as a bare number that reformats halfway
+ * through. Anything that is not a figure (a bare year, an em dash) renders
+ * verbatim, because a roll-up has nothing to count.
+ *
+ * The vertical flip is kept: the key on the inner span restarts the CSS
+ * animation on its own, so a reading that changes after mount still arrives
+ * the way the rest of the panel does.
  */
 export function SlotValue({
   value,
@@ -141,10 +165,25 @@ export function SlotValue({
   value: string;
   className?: string;
 }) {
+  const reduced = useReducedMotion();
+  const figure = useMemo(() => parseFigure(value), [value]);
+
+  const count = useMotionValue(0);
+  const text = useTransform(count, (latest) => formatFigure(figure, latest));
+
+  useEffect(() => {
+    const controls = animate(
+      count,
+      figure.value,
+      reduced ? { duration: 0 } : SPRING,
+    );
+    return () => controls.stop();
+  }, [count, figure.value, reduced]);
+
   return (
     <span className="nb-slot">
       <span key={value} className={`nb-slot__inner ${className ?? ""}`}>
-        {value}
+        {figure.numeric ? <motion.span>{text}</motion.span> : value}
       </span>
     </span>
   );
