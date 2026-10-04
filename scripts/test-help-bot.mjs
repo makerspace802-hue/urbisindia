@@ -539,24 +539,66 @@ check("reports are private: no public feed, and the desk is admin-gated twice", 
   );
 });
 
-check("the previous seed admin has been revoked", () => {
+check("there is exactly one admin, and it is the address the owner chose", () => {
   const identity = readFileSync("src/convex/identity.ts", "utf8");
-  assert.ok(
-    !identity.includes("makerspace802@gmail.com"),
-    "the revoked admin is still seeded in identity.ts",
-  );
-  assert.ok(
-    /SEED_ADMIN_EMAILS = \["makpratyushdhote20@gmail\.com"\]/.test(identity),
-    "the replacement admin is not the only seeded address",
-  );
-  // A seed list with a space in the address can never match a real account.
+  for (const revoked of [
+    "makerspace802@gmail.com",
+    "makpratyushdhote20@gmail.com",
+  ]) {
+    assert.ok(
+      !identity.includes(revoked),
+      `${revoked} is still seeded in identity.ts`,
+    );
+  }
+
   const seeds = identity.match(/SEED_ADMIN_EMAILS = \[([^\]]*)\]/)[1];
-  for (const email of seeds.match(/"([^"]+)"/g).map((e) => e.slice(1, -1))) {
+  const addresses = seeds.match(/"([^"]+)"/g).map((e) => e.slice(1, -1));
+  assert.deepEqual(
+    addresses,
+    ["pratyushdhote20@gmail.com"],
+    "the seeded admin list must be exactly the owner's address and nothing else",
+  );
+  // A seed with a space, or without an @, can never match a real account, and
+  // the symptom is an admin desk nobody can see.
+  for (const email of addresses) {
     assert.ok(
       !/\s/.test(email) && email.includes("@"),
       `"${email}" is not a usable email address`,
     );
   }
+});
+
+check("email is the only route to admin", () => {
+  // A second path to admin defeats the point of having one, so this pins both
+  // that the old `role` fallback is gone and that nothing can mint an admin.
+  const identity = readFileSync("src/convex/identity.ts", "utf8");
+  const admin = readFileSync("src/convex/admin.ts", "utf8");
+
+  // `purgeOtherAdmins` is the one legitimate reader, and it only clears.
+  const checks = identity.match(/role === "admin"/g) ?? [];
+  assert.ok(
+    checks.length <= 1,
+    "the users.role admin fallback has been reintroduced",
+  );
+  assert.ok(
+    /grantAdminByEmail = mutation/.test(identity) === false,
+    "a mutation that can grant admin to a second account still exists",
+  );
+  assert.ok(
+    /export const grantAdmin = mutation/.test(admin) === false,
+    "admin.grantAdmin can still mint a second admin",
+  );
+  // Revoking must not be able to remove the seeded owner and lock everyone out.
+  const revoke = identity.slice(identity.indexOf("export const revokeAdminByEmail"));
+  assert.ok(
+    /isSeedAdmin\(email\)/.test(revoke),
+    "revokeAdminByEmail could remove the seeded owner and lock out every admin",
+  );
+  // And there has to be a way to clear grants left over from the old setup.
+  assert.ok(
+    /export const purgeOtherAdmins = mutation/.test(identity),
+    "no way remains to remove admin rights from other accounts",
+  );
 });
 
 check("the bot no longer promises a public feed", () => {

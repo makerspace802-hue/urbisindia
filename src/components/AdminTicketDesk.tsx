@@ -62,6 +62,28 @@ export default function AdminTicketDesk() {
   const resolveIssue = useMutation(api.admin.resolveIssue);
   const upvoteIssue = useMutation(api.admin.upvoteIssue);
   const purgeAllIssues = useMutation(api.admin.purgeAllIssues);
+  const purgeOtherAdmins = useMutation(api.identity.purgeOtherAdmins);
+  const [purgingAdmins, setPurgingAdmins] = useState(false);
+  const [adminNote, setAdminNote] = useState<string | null>(null);
+
+  const handlePurgeAdmins = async () => {
+    setPurgingAdmins(true);
+    setAdminNote(null);
+    try {
+      const result = await purgeOtherAdmins();
+      setAdminNote(
+        `Removed ${result.removedGrants.length} extra grant(s) and cleared ` +
+          `${result.clearedRoles} legacy role flag(s). Sole admin: ` +
+          result.admins.join(", "),
+      );
+    } catch (error) {
+      setAdminNote(
+        error instanceof Error ? error.message : "Could not purge other admins",
+      );
+    } finally {
+      setPurgingAdmins(false);
+    }
+  };
 
   const [filter, setFilter] = useState<"open" | "all">("open");
   const [resolvingTicket, setResolvingTicket] = useState<string | null>(null);
@@ -131,7 +153,23 @@ export default function AdminTicketDesk() {
               Clear All
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => void handlePurgeAdmins()}
+            disabled={purgingAdmins}
+            title="Remove every admin grant except yours, and clear legacy role flags"
+            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
+          >
+            <ShieldAlert className="size-3.5" strokeWidth={3} />
+            {purgingAdmins ? "Working…" : "Sole Admin"}
+          </button>
         </div>
+
+      {adminNote && (
+        <p className="border-b-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-3 text-xs font-bold leading-relaxed text-[var(--nb-text-2)]">
+          {adminNote}
+        </p>
+      )}
       </div>
 
       {/* Two-step confirmation, because this cannot be undone. The stored blob

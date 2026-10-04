@@ -1,8 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
-import { normaliseEmail, requireAdminEmail } from "./identity";
-import { roleValidator } from "./schema";
+import { requireAdminEmail } from "./identity";
 
 const issueStatusValidator = v.union(
   v.literal("New"),
@@ -30,22 +29,6 @@ export const isAdmin = query({
   },
 });
 
-/**
- * Grant the admin role to a user row. Kept for the existing admin panel.
- *
- * Prefer `identity.grantAdminByEmail`: it follows the person across every
- * sign-in provider, whereas setting `role` here only affects the single user
- * row that happened to be created by the current provider.
- */
-export const setRole = mutation({
-  args: { userId: v.id("users"), role: roleValidator },
-  handler: async (ctx, args) => {
-    await requireAdminEmail(ctx);
-    await ctx.db.patch(args.userId, { role: args.role });
-    return args.userId;
-  },
-});
-
 /** Every admin email, for the admin panel. */
 export const listAdminEmails = query({
   args: {},
@@ -56,27 +39,7 @@ export const listAdminEmails = query({
   },
 });
 
-/** Grant admin to an email. Survives provider changes. */
-export const grantAdmin = mutation({
-  args: { email: v.string() },
-  handler: async (ctx, args) => {
-    const { email } = await requireAdminEmail(ctx);
-    const target = normaliseEmail(args.email);
-    if (!target) throw new Error("A valid email is required");
-    const existing = await ctx.db
-      .query("adminGrants")
-      .withIndex("by_email", (q) => q.eq("email", target))
-      .first();
-    if (!existing) {
-      await ctx.db.insert("adminGrants", {
-        email: target,
-        grantedBy: email,
-        createdAt: Date.now(),
-      });
-    }
-    return target;
-  },
-});
+
 
 /**
  * A one-time URL the browser POSTs an image file to.
