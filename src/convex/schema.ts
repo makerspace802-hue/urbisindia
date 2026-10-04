@@ -127,6 +127,27 @@ const schema = defineSchema(
       createdAt: v.number(),
     }).index("by_email", ["email"]),
 
+    // How a resident has chosen to personalise their dashboard.
+    //
+    // Keyed by email for the same reason `adminGrants` is: every sign-in
+    // provider creates its own `users` row, so a preference saved against one
+    // row would vanish when the same person used a different provider.
+    dashboardPrefs: defineTable({
+      email: v.string(),
+      /**
+       * `{ state, metrics, showNational }`. Stored as a loose object rather
+       * than typed columns because the metric set is a catalogue in
+       * `lib/dashboardPreferences.ts` and is normalised on read and write —
+       * an id dropped from the catalogue must not break a stored row.
+       */
+      prefs: v.object({
+        state: v.nullable(v.string()),
+        metrics: v.array(v.string()),
+        showNational: v.boolean(),
+      }),
+      updatedAt: v.number(),
+    }).index("by_email", ["email"]),
+
     // add other tables here
 
     // tableName: defineTable({

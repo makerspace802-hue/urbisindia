@@ -1,5 +1,8 @@
 import CensusCharts from "@/components/CensusCharts";
+import DashboardCustomiser from "@/components/DashboardCustomiser";
 import { Reveal, SlotValue } from "@/components/Retro";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/hooks/use-auth";
 import {
   CENTURY_MULTIPLE,
   FIRST_CENSUS_YEAR,
@@ -10,7 +13,17 @@ import {
   OPENING_CENSUS,
   PEAK_DECADAL,
 } from "@/lib/censusData";
+import {
+  METRIC_CATALOGUE,
+  metricDef,
+  readMetric,
+  type MetricReading,
+} from "@/lib/dashboardPreferences";
+import { useLocation } from "@/lib/locationContext";
+import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
+import { SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
 
 /** Compact population formatting for the card values. */
 const compact = (v: number) =>
@@ -160,6 +173,31 @@ export default function CommandCenter() {
     year: "numeric",
   });
 
+  /**
+   * Personalisation.
+   *
+   * `prefs.state` is null until the resident picks one, and until then the
+   * cards fall back to the located state, then to India. Every figure comes
+   * from `readMetric`, which returns null for a metric the tables do not hold —
+   * that card is dropped rather than shown as a zero.
+   */
+  const { isAuthenticated } = useAuth();
+  const profile = useQuery(api.profile.myProfile);
+  const prefs = useQuery(api.dashboard.myDashboard);
+  const { state: located } = useLocation();
+  const [customising, setCustomising] = useState(false);
+
+  const targetState = prefs?.state ?? located ?? null;
+  const readings: Array<{ id: string; def: (typeof METRIC_CATALOGUE)[number]; reading: MetricReading }> =
+    (prefs?.metrics ?? [])
+      .map((id) => {
+        if (!targetState) return null;
+        const def = metricDef(id);
+        const reading = readMetric(targetState, id);
+        return def && reading ? { id, def, reading } : null;
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
   
 
   return (
@@ -169,9 +207,67 @@ export default function CommandCenter() {
           Dashboard
         </h1>
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">{today}</span>
+        <button
+          type="button"
+          onClick={() => setCustomising((value) => !value)}
+          aria-expanded={customising}
+          className="nb-btn bg-[#06B6D4] text-[#03151A]"
+        >
+          <SlidersHorizontal className="size-4" strokeWidth={3} />
+          Customise
+        </button>
       </div>
 
+      {customising && (
+        <DashboardCustomiser
+          onClose={() => setCustomising(false)}
+          signedIn={isAuthenticated}
+          signedInEmail={profile?.email ?? ""}
+        />
+      )}
+
+      {/* Personalised readings for the chosen state */}
+      {readings.length > 0 && (
+        <section className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="nb-title text-sm md:text-base">
+              {targetState} — Your Figures
+            </h2>
+            <span className="nb-chip bg-[#FBBF24] text-[#1A1400]">
+              Census Of India · {LAST_CENSUS_YEAR}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {readings.map((entry, index) => (
+              <motion.article
+                key={entry.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: index * 0.05 }}
+                className="nb-panel p-4 transition-transform duration-150 hover:scale-[1.01]"
+              >
+                <h3 className="text-[11px] font-black uppercase leading-snug tracking-widest text-[var(--nb-text-muted)]">
+                  {entry.def.title}
+                </h3>
+                <SlotValue
+                  value={entry.reading.value}
+                  className="mt-3 block text-3xl font-black leading-none tabular-nums text-[var(--nb-text)]"
+                />
+                <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
+                  {entry.reading.note}
+                </p>
+                <p className="mt-3 border-t-2 border-[var(--nb-ink)] pt-2 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-dim)]">
+                  {entry.def.unit}
+                </p>
+              </motion.article>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Century baseline — every figure below is read from the uploaded CSVs */}
+      {prefs?.showNational !== false && (
+      <>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="nb-title text-sm md:text-base">
           A Century Of Census
@@ -228,6 +324,8 @@ export default function CommandCenter() {
         ))}
         </div>
       </Reveal>
+      </>
+      )}
 
       {/* Census decade view, replacing the retired digital-twin map */}
       <section className="mt-8">
