@@ -509,13 +509,30 @@ check("the header carries its specified motion", () => {
   assert.match(header, /useReducedMotion/);
 });
 
-check("the header status bar shares one weather reading", () => {
-  assert.match(header, /useWeather\(\)/);
-  assert.match(header, /HeaderClock/);
-  assert.match(header, /tabular-nums/);
-  // A second fetch would let the two temperatures disagree.
+check("the header carries one clock, not two", () => {
+  // A header status bar (live clock + temperature pill) was built and then
+  // removed — the draggable widget already shows both, and two clocks on one
+  // page is one too many. What must not come back is a second fetch: the
+  // widget stays the only surface, and it reads the shared store rather than
+  // issuing its own request.
+  assert.ok(
+    !/HeaderClock|WeatherPill/.test(header),
+    "the header status bar has been reinstated",
+  );
+  assert.ok(!/toLocaleTimeString/.test(header), "the header is ticking its own clock again");
+  assert.ok(
+    !/useWeather|fetchWeather/.test(header),
+    "the header subscribes to weather again",
+  );
+
   const widget = flat("src/components/ClockWeatherWidget.tsx");
-  assert.ok(!widget.includes("fetchWeather("), "the widget fetches weather itself again");
+  // Match the name, not a call site. Checking for `fetchWeather(` alone would
+  // pass with the import reintroduced but unused — which is how the widget
+  // starts issuing its own request again the moment someone wires it up.
+  assert.ok(
+    !/fetchWeather/.test(widget),
+    "the widget talks to the weather API directly instead of the store",
+  );
   assert.match(widget, /loadWeather/);
   assert.match(flat("src/lib/weatherStore.ts"), /useSyncExternalStore/);
 });
