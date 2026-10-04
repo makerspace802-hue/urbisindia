@@ -108,6 +108,74 @@ assert.match(
   "the boundary computes staleChunk but never uses it",
 );
 
+// Chart discrepancies: Recharts silently drops category ticks and truncates
+// long labels rather than erroring, so both are asserted from the real data.
+const insights = readFileSync(join(ROOT, "components/CensusInsights.tsx"), "utf8");
+const census = readFileSync(join(ROOT, "lib/censusData.ts"), "utf8");
+
+const stateNames = [
+  ...new Set(
+    [...census.matchAll(/\{ name: "([^"]+)", population2001:/g)].map((m) => m[1]),
+  ),
+];
+assert.ok(stateNames.length >= 35, "could not read the state list from censusData");
+const longestName = stateNames.reduce((a, b) => (b.length > a.length ? b : a), "");
+
+// Every state bar needs a legible row: Recharts drops a tick whose band is
+// narrower than fontSize + tickMargin. Madhya Pradesh was silently dropped.
+const rowHeight = Number(
+  /const ROW_HEIGHT = (\d+)/.exec(insights)?.[1] ?? "0",
+);
+const tickRequirement = 10 + 8; // AXIS_TICK fontSize + Recharts' default tickMargin
+assert.ok(
+  rowHeight >= tickRequirement,
+  `rows are ${rowHeight}px but Recharts needs ${tickRequirement}px before it drops a label`,
+);
+assert.equal(stateNames.length, 35, "expected all 35 states in the league tables");
+
+// The axis must be wide enough for the longest name or it truncates.
+const axisWidth = Number(
+  /const AXIS_NAME_WIDTH = (\d+)/.exec(insights)?.[1] ?? "0",
+);
+const longestNeeded = Math.ceil(longestName.length * 6.6) + 12;
+assert.ok(
+  axisWidth >= longestNeeded,
+  `axis is ${axisWidth}px but "${longestName}" needs ~${longestNeeded}px`,
+);
+
+// Both category axes must opt out of tick thinning.
+const yAxes = [...insights.matchAll(/<YAxis[\s\S]{0,320}?\/>/g)].map((m) => m[0]);
+const categoryAxes = yAxes.filter((a) => a.includes('type="category"'));
+assert.equal(categoryAxes.length, 2, "expected two category axes");
+for (const axis of categoryAxes) {
+  assert.match(axis, /interval=\{0\}/, "a category axis can still drop state labels");
+  assert.match(axis, /AXIS_NAME_WIDTH/, "a category axis is not using the shared name width");
+}
+
+// Every tooltip must be themed: Recharts' default is grey-on-white, which is
+// what made the state name unreadable in the growth table. Scan line-wise
+// instead of by regex: the inner `<XTooltip />` contains its own `/>`, so a
+// lazy pattern stops in the middle of the element.
+const tooltipCount = (insights.match(/<Tooltip\b/g) ?? []).length;
+assert.equal(tooltipCount, 4, "expected one tooltip per panel");
+const themedTooltipUse = (
+  insights.match(/content=\{<\w+Tooltip\s*\/>\}/g) ?? []
+).length;
+assert.equal(
+  themedTooltipUse,
+  tooltipCount,
+  "a panel is still using Recharts' unthemed default tooltip",
+);
+// The bar panels additionally must not use the `formatter` prop, which only
+// applies to the default tooltip and would silently stop rendering.
+const formatterUse = (insights.match(/<Tooltip[\s\S]{0,240}?formatter=/g) ?? [])
+  .length;
+assert.equal(
+  formatterUse,
+  0,
+  "a themed tooltip was given a `formatter`, which it ignores",
+);
+
 if (findings.length > 0) {
   console.log(`links: ${findings.length} dead end(s) of ${checked} destinations`);
   for (const finding of findings) console.log(`  DEAD ${finding}`);

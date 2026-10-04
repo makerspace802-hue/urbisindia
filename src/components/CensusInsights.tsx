@@ -47,6 +47,103 @@ const LOSS = "#F43F5E";
 const INDIA = "#06B6D4";
 const MARK = "#FBBF24";
 
+/**
+ * Height that fits all 35 states as a legible one-line label.
+ *
+ * These league tables plot one bar per state, and Recharts silently drops
+ * category ticks whose band is narrower than the text it has to draw. The old
+ * fixed `420px` gave each of 35 rows a 12px band against a 10px font plus an
+ * 8px tick margin — 18px needed — so Recharts thinned the axis. Madhya Pradesh,
+ * the row that matters most because it is the visitor's own state, lost its
+ * label while keeping its bar. 22px per row clears the requirement, and
+ * `interval={0}` stops Recharts thinning the list behind our back.
+ */
+const STATE_ROWS = 35;
+const ROW_HEIGHT = 22;
+const STATE_CHART_HEIGHT = STATE_ROWS * ROW_HEIGHT;
+
+/**
+ * Width for the longest state name, "Andaman & Nicobar Islands".
+ *
+ * At 10px bold the longest label needs ~163px including its tick margin, so the
+ * old `128` silently truncated it — a state in the league table with no readable
+ * name against its bar.
+ */
+const AXIS_NAME_WIDTH = 184;
+
+/**
+ * Themed tooltip for the sex-ratio league table, which also carries the two
+ * endpoint ratios so the shift can be read without cross-referencing.
+ */
+function SexRatioTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    value?: number;
+    payload?: { sexRatio2001: number; sexRatio2011: number };
+  }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const value = Number(payload[0]?.value ?? 0);
+  const row = payload[0]?.payload;
+  return (
+    <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2 shadow-[4px_4px_0_0_var(--nb-ink)]">
+      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text)]">
+        {label}
+      </p>
+      <p className="mt-1 text-xs font-bold text-[var(--nb-text-2)]">
+        Shift :{" "}
+        <span className="font-black tabular-nums">
+          {value > 0 ? `+${value}` : `${value}`}
+        </span>
+      </p>
+      {row && (
+        <p className="text-[10px] font-bold tabular-nums text-[var(--nb-text-muted)]">
+          {row.sexRatio2001} → {row.sexRatio2011} females per 1,000 males
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Themed tooltip for the two league tables.
+ *
+ * Recharts' built-in tooltip hard-codes a white background with a mid-grey
+ * label, which is unreadable here and ignored the theme entirely — the state
+ * name in the growth tooltip came out pale grey on white. This matches
+ * `DotTooltip` below so all four panels read the same way.
+ */
+function BarTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const value = Number(payload[0]?.value ?? 0);
+  return (
+    <div className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2 shadow-[4px_4px_0_0_var(--nb-ink)]">
+      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--nb-text)]">
+        {label}
+      </p>
+      <p className="mt-1 text-xs font-bold text-[var(--nb-text-2)]">
+        Growth :{" "}
+        <span className="font-black tabular-nums">
+          {value >= 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`}
+        </span>
+      </p>
+    </div>
+  );
+}
+
 /** Tooltip shared by the two scatter panels. */
 function DotTooltip({
   active,
@@ -109,7 +206,7 @@ export function CensusInsights() {
         <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
           Decadal percentage growth. India grew {indiaGrowth.toFixed(2)}%.
         </p>
-        <div className="h-[420px] w-full">
+        <div style={{ height: STATE_CHART_HEIGHT }} className="w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={ranked} layout="vertical" margin={{ top: 4, right: 32, bottom: 4, left: 4 }}>
               <CartesianGrid stroke="rgba(100,116,139,0.35)" horizontal={false} />
@@ -126,13 +223,11 @@ export function CensusInsights() {
                 tick={AXIS_TICK}
                 tickLine={false}
                 axisLine={AXIS_LINE}
-                width={128}
+                width={AXIS_NAME_WIDTH}
+                interval={0}
               />
               <ReferenceLine x={indiaGrowth} stroke="var(--nb-ink)" strokeWidth={2} strokeDasharray="6 4" />
-              <Tooltip
-                cursor={{ fill: "rgba(11,15,23,0.08)" }}
-                formatter={(v: number) => [`+${v.toFixed(2)}%`, "Growth"]}
-              />
+              <Tooltip content={<BarTooltip />} cursor={{ fill: "rgba(11,15,23,0.08)" }} />
               <Bar dataKey="percentChange" stroke="var(--nb-ink)" strokeWidth={1.5}>
                 {ranked.map((row) => (
                   <Cell
@@ -160,7 +255,7 @@ export function CensusInsights() {
           Change in the ratio across the decade. A bar below the line means the
           state lost ground on gender balance.
         </p>
-        <div className="h-[420px] w-full">
+        <div style={{ height: STATE_CHART_HEIGHT }} className="w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={sexRanked} layout="vertical" margin={{ top: 4, right: 32, bottom: 4, left: 4 }}>
               <CartesianGrid stroke="rgba(100,116,139,0.35)" horizontal={false} />
@@ -177,15 +272,13 @@ export function CensusInsights() {
                 tick={AXIS_TICK}
                 tickLine={false}
                 axisLine={AXIS_LINE}
-                width={128}
+                width={AXIS_NAME_WIDTH}
+                interval={0}
               />
               <ReferenceLine x={0} stroke="var(--nb-ink)" strokeWidth={2} />
               <Tooltip
                 cursor={{ fill: "rgba(11,15,23,0.08)" }}
-                formatter={(v: number, _n, item) => [
-                  `${v > 0 ? "+" : ""}${v}`,
-                  `${item.payload.name}: ${item.payload.sexRatio2001} → ${item.payload.sexRatio2011}`,
-                ]}
+                content={<SexRatioTooltip />}
               />
               <Bar dataKey="sexShift" stroke="var(--nb-ink)" strokeWidth={1.5}>
                 {sexRanked.map((row) => (
