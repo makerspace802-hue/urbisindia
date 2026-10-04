@@ -251,12 +251,12 @@ export default function CommandCenter() {
   /**
    * Personalisation is for accounts only.
    *
-   * A guest sees the four India-wide cards and nothing else — no Customise
-   * button and no personalised readings. Earlier this let a guest browse a
-   * layout they could never save, which read as broken: the controls appeared,
-   * changed the page, and then reverted on reload. Since a layout only means
-   * anything when it is attached to an account, the whole feature is now behind
-   * sign-in rather than half-available.
+   * A signed-out visitor sees the four India-wide cards and nothing else — no
+   * Customise button and no personalised readings. Earlier this let someone
+   * browse a layout they could never save, which read as broken: the controls
+   * appeared, changed the page, and then reverted on reload. Since a layout
+   * only means anything when it is attached to an account, the whole feature
+   * is now behind sign-in rather than half-available.
    */
   const targetState = isAuthenticated ? (prefs?.state ?? null) : null;
   const readings: Array<{

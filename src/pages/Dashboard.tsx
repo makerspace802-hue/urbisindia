@@ -45,8 +45,8 @@ export default function Dashboard() {
     event.preventDefault();
 
     // The route is already wrapped in `RequireAuth`, and `updateProfile`
-    // rejects an anonymous caller server-side. This is the third layer: it
-    // means personalisation can never be driven from a signed-out session even
+    // rejects a signed-out caller server-side. This is the third layer: it
+    // means personalisation can never be driven without a session even
     // if this component is rendered somewhere without that wrapper.
     if (!isAuthenticated) return;
 
@@ -209,8 +209,8 @@ export default function Dashboard() {
 
               Name, city, country and profile picture are all persisted against
               a user record, so there is nothing to personalise without one.
-              Rendered as a locked panel rather than a disabled form: a guest
-              who can still fill in the fields is a guest who will lose what
+              Rendered as a locked panel rather than a disabled form: someone
+              who can still fill in the fields is someone who will lose what
               they typed on save.
             */}
             {!isAuthenticated ? (

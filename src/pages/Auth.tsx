@@ -27,7 +27,6 @@ import {
   Lock,
   Mail,
   ShieldCheck,
-  UserX,
 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -190,20 +189,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  const handleGuestLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await signIn("anonymous");
-      navigate(redirect);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start a guest session.",
-      );
-      setIsLoading(false);
-    }
-  };
-
   /**
    * Attach a password to the account that was just verified over email. This
    * is the step that makes every future sign-in an ordinary password sign-in
@@ -309,18 +294,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </NbButton>
               {error && <ErrorText>{error}</ErrorText>}
             </CardContent>
-            <CardFooter className="flex-col gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full text-[var(--nb-text-muted)]"
-                onClick={handleGuestLogin}
-                disabled={isLoading}
-              >
-                <UserX className="mr-2 h-4 w-4" />
-                Continue as guest
-              </Button>
-            </CardFooter>
           </>
         )}
 

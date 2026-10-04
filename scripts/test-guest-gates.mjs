@@ -17,7 +17,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 /**
  * Comments stripped, whitespace collapsed, so formatting cannot break these.
@@ -71,6 +71,7 @@ function check(name, fn) {
 const report = flat("src/pages/ReportPortal.tsx");
 const dash = flat("src/pages/Dashboard.tsx");
 const entry = flat("src/main.tsx");
+const auth = flat("src/pages/Auth.tsx");
 const admin = readFileSync("src/convex/admin.ts", "utf8");
 const profile = readFileSync("src/convex/profile.ts", "utf8");
 
@@ -220,6 +221,80 @@ check("the public dashboard stays guest-usable apart from customisation", () => 
   assert.ok(!/<RequireAuth/.test(flat("src/pages/CommandCenter.tsx")));
   assert.match(flat("src/pages/CommandCenter.tsx"), /\{isAuthenticated && \(\s*<button/);
 });
+
+/* ==========================================================================
+   3. No guest accounts
+   ========================================================================== */
+
+check("nothing can sign in anonymously any more", () => {
+  // `signIn("anonymous")` is Convex Auth's anonymous provider, and it was not
+  // a "no account" mode — it minted a real row in `users` with a real session.
+  // Anyone who used it became an account holder, which is the opposite of what
+  // "guest" implies on the button.
+  assert.ok(
+    !/signIn\(\s*"anonymous"/.test(auth),
+    "the sign-in page can still start an anonymous session",
+  );
+
+  // The call is gone everywhere, not just from this page.
+  const offenders = [];
+  for (const file of walk("src")) {
+    if (file.includes("_generated")) continue;
+    const body = readFileSync(file, "utf8");
+    if (/signIn\(\s*"anonymous"/.test(body)) offenders.push(file);
+  }
+  assert.deepEqual(offenders, [], "anonymous sign-in is still reachable");
+});
+
+check("the guest button and its handler are gone", () => {
+  assert.ok(!/handleGuestLogin/.test(auth), "handleGuestLogin still exists");
+  assert.ok(!/Continue as guest/i.test(auth), 'the "Continue as guest" button is back');
+  assert.ok(!/UserX/.test(auth), "the guest icon import is still here");
+  assert.ok(
+    !/guest session/i.test(auth),
+    "the guest-session error copy is still here",
+  );
+});
+
+check("no page still speaks of a guest account", () => {
+  // "Guest" as a word for a signed-out visitor is fine; a guest *account* is
+  // not. Any source that still offers one has to be found.
+  const offenders = [];
+  for (const file of walk("src")) {
+    if (file.includes("_generated")) continue;
+    const body = readFileSync(file, "utf8");
+    if (/guest/i.test(body)) offenders.push(file);
+  }
+  assert.deepEqual(offenders, [], "the word 'guest' survives somewhere in src/");
+});
+
+check("sign-in still offers the real ways in", () => {
+  // Removing one option must not remove the others.
+  assert.match(auth, /signIn\("google"\)/);
+  assert.match(auth, /signIn\("email-otp"/);
+  assert.match(auth, /flow: "signIn"/);
+  assert.match(auth, /flow: "signUp"/);
+});
+
+check("the anonymous schema field is left alone, deliberately", () => {
+  // `isAnonymous` is @convex-dev/auth's own field on the users table and its
+  // comment says "do not remove". It is a library contract, not the guest
+  // feature — the feature was the UI entry point, which is gone. Dropping the
+  // field would break the auth library's writes for any row it still touches.
+  const schema = readFileSync("src/convex/schema.ts", "utf8");
+  assert.match(schema, /isAnonymous/);
+});
+
+/** Every source file under `dir`, recursively. */
+function walk(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walk(full));
+    else if (/\.(ts|tsx)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
 
 /* ==========================================================================
    Result
