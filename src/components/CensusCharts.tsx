@@ -1,6 +1,7 @@
 import { RetroMarquee, RetroSwitcher } from "@/components/Retro";
 import { LocationPulse } from "@/components/LocationPulse";
 import { PLACE_FALLBACK } from "@/lib/geo";
+import { heatFill, HEAT_NEUTRAL, textFor } from "@/lib/heatScale";
 import { useLocation } from "@/lib/locationContext";
 import {
   COMMUTE,
@@ -17,7 +18,7 @@ import { useState } from "react";
 
 const GAIN = "#10B981";
 const LOSS = "#F43F5E";
-const NEUTRAL = "#64748B";
+const NEUTRAL = HEAT_NEUTRAL;
 
 type View = "decadal" | "place" | "people" | "commute";
 
@@ -34,12 +35,13 @@ type GeoState = "requesting" | "located" | "denied" | "unavailable";
  * Diverging scale, not a good/bad one: green is "more", red is "less".
  * Nothing here claims a shrinking population is a bad outcome — only that it
  * moved one way.
+ *
+ * The scale itself lives in `lib/heatScale.ts`, where it can be checked against
+ * the WCAG contrast rules by running it. It was previously an alpha wash under
+ * hard-coded white text, which put figures at 1.42:1 in light mode.
  */
 function tone(value: number | null, max: number) {
-  if (value === null) return NEUTRAL;
-  if (value === 0 || !Number.isFinite(max) || max === 0) return NEUTRAL;
-  const alpha = 0.22 + Math.min(1, Math.abs(value) / max) * 0.78;
-  return value > 0 ? `rgba(16,185,129,${alpha})` : `rgba(244,63,94,${alpha})`;
+  return heatFill(value, max);
 }
 
 function Cell({
@@ -65,12 +67,14 @@ function Cell({
           : value >= 1_000
             ? `${(value / 1_000).toFixed(0)}K`
             : String(value);
+  const fill = tone(value, max);
   return (
     <div
       title={label}
-      className="flex h-7 items-center justify-center border text-[9px] font-black tabular-nums text-white"
+      className="flex h-7 items-center justify-center border text-[10px] font-black tabular-nums"
       style={{
-        backgroundColor: tone(value, max),
+        backgroundColor: fill.background,
+        color: fill.color,
         borderColor: highlight ? "#FBBF24" : "var(--nb-ink)",
         borderWidth: highlight ? 2 : 1,
       }}
@@ -81,18 +85,29 @@ function Cell({
 }
 
 function Legend() {
+  // The swatches show the real ends of the ramp rather than one flat brand
+  // colour, so the legend actually describes what the cells look like.
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t-2 border-[var(--nb-ink)] pt-2.5 text-[10px] font-black uppercase tracking-wide">
       <span className="flex items-center gap-1.5">
-        <span className="inline-block h-3 w-3" style={{ backgroundColor: GAIN }} />
+        <span
+          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
+          style={{ backgroundColor: heatFill(1, 1).background }}
+        />
         gain
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="inline-block h-3 w-3" style={{ backgroundColor: LOSS }} />
+        <span
+          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
+          style={{ backgroundColor: heatFill(-1, 1).background }}
+        />
         loss
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="inline-block h-3 w-3" style={{ backgroundColor: NEUTRAL }} />
+        <span
+          className="inline-block h-3 w-3 border border-[var(--nb-ink)]"
+          style={{ backgroundColor: NEUTRAL }}
+        />
         no figure / not applicable
       </span>
       <span className="text-[var(--nb-text-dim)]">darker = larger</span>
@@ -120,12 +135,12 @@ function DecadalGrid({ place }: { place: string | null }) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <div className="min-w-[760px]">
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="min-w-[560px]">
           <div
             className="grid gap-1"
             style={{
-              gridTemplateColumns: `150px repeat(${DECADAL_LABELS.length}, minmax(0,1fr))`,
+              gridTemplateColumns: `minmax(104px, 150px) repeat(${DECADAL_LABELS.length}, minmax(44px, 1fr))`,
             }}
           >
             <div />
@@ -139,11 +154,18 @@ function DecadalGrid({ place }: { place: string | null }) {
             ))}
             {STATE_DECADAL.map((state) => (
               <div key={state.name} className="contents">
+                {/*
+                  Sticky on purpose: the grid is wider than a phone, so without
+                  this the decade headings scroll away and every cell becomes an
+                  anonymous number. Pinning the name keeps each figure attached to
+                  its state while the decades scroll under it.
+                */}
                 <div
-                  className="flex items-center justify-end gap-1.5 pr-2 text-right text-[10px] font-black uppercase tracking-tight"
+                  className="sticky left-0 z-10 flex items-center justify-end gap-1.5 bg-[var(--nb-surface)] pr-2 text-right text-[10px] font-black uppercase tracking-tight"
                   style={{
                     color:
                       place && state.name === place ? "#FBBF24" : "var(--nb-text-2)",
+                    boxShadow: "2px 0 0 0 var(--nb-ink)",
                   }}
                 >
                   {place && state.name === place ? "▸" : ""}
@@ -164,6 +186,10 @@ function DecadalGrid({ place }: { place: string | null }) {
         </div>
       </div>
       <Legend />
+      {/* Only shown where the grid genuinely overflows. */}
+      <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-dim)] sm:hidden">
+        Swipe the table sideways for the later censuses →
+      </p>
       <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
         {statesWithLoss} of {STATE_DECADAL.length} states lost population in at
         least one decade — {lossCells} losses in total.{" "}
@@ -334,11 +360,11 @@ function CommuteGrid({ place }: { place: string | null }) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <div className="min-w-[720px]">
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="min-w-[560px]">
           <div
             className="grid gap-1"
-            style={{ gridTemplateColumns: `170px repeat(${COMMUTE_BANDS.length}, minmax(0,1fr))` }}
+            style={{ gridTemplateColumns: `minmax(96px, 170px) repeat(${COMMUTE_BANDS.length}, minmax(44px, 1fr))` }}
           >
             <div />
             {COMMUTE_BANDS.map((band) => (
@@ -351,7 +377,12 @@ function CommuteGrid({ place }: { place: string | null }) {
             ))}
             {COMMUTE.map((row) => (
               <div key={row.mode} className="contents">
-                <div className="flex items-center justify-end pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]">
+                {/* Sticky for the same reason as the decadal grid: the mode name
+                    has to stay with its numbers on a narrow screen. */}
+                <div
+                  className="sticky left-0 z-10 flex items-center justify-end bg-[var(--nb-surface)] pr-2 text-right text-[10px] font-black uppercase tracking-tight text-[var(--nb-text-2)]"
+                  style={{ boxShadow: "2px 0 0 0 var(--nb-ink)" }}
+                >
                   {row.mode}
                 </div>
                 {row.values.map((value, i) => (
@@ -369,6 +400,11 @@ function CommuteGrid({ place }: { place: string | null }) {
         </div>
       </div>
       <Legend />
+      {/* Only shown where the grid genuinely overflows. A phone user otherwise
+          has no cue that the table continues sideways. */}
+      <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[var(--nb-text-dim)] sm:hidden">
+        Swipe the table sideways for the remaining distance bands →
+      </p>
       <p className="mt-3 text-[11px] font-bold leading-relaxed text-[var(--nb-text-dim)]">
         Table B-28 is published at India level only, so this view stays national{" "}
         {place ? <>even though you are browsing {place}</> : null}. The blank cells are
@@ -448,16 +484,43 @@ export default function CensusCharts() {
       )}
 
       <div className="mb-4">
-        <RetroMarquee
-          items={[
+        {/*
+          The stats strip. On a desktop this is a ticker, which is fine because
+          there is room. On a phone the same markup became one line ~2000px wide
+          that scrolled off both edges with no way to read it — the exact thing
+          that made the mobile layout feel broken. Below `sm` the items wrap into
+          a static grid instead, so every figure is actually readable, and the
+          ticker only takes over where there is room for it.
+        */}
+        <div className="hidden sm:block">
+          <RetroMarquee
+            items={[
             `Census of India 2011 · ${STATE_DECADAL.length} states and union territories`,
             `Latest census recorded ${(INDIA_2011.population / 1_000_000).toFixed(1)} million people`,
             `${(INDIA_2011.households / 1_000_000).toFixed(1)} million households · ${INDIA_2011.towns.toLocaleString("en-IN")} towns`,
             `${(INDIA_SPATIAL.inhabitedVillages).toLocaleString("en-IN")} inhabited villages · ${(INDIA_SPATIAL.uninhabitedVillages).toLocaleString("en-IN")} standing empty`,
             `Urban share ${INDIA_2011.urbanSharePercent}% · average density ${INDIA_2011.density} per km²`,
             `Scheduled Tribe ${INDIA_2011.stSharePercent}% · Scheduled Caste ${INDIA_2011.scSharePercent}% of the population`,
-          ]}
-        />
+            ]}
+          />
+        </div>
+        <dl className="grid grid-cols-1 gap-2 sm:hidden">
+          {[
+            `Census of India 2011 · ${STATE_DECADAL.length} states and union territories`,
+            `Latest census recorded ${(INDIA_2011.population / 1_000_000).toFixed(1)} million people`,
+            `${(INDIA_2011.households / 1_000_000).toFixed(1)} million households · ${INDIA_2011.towns.toLocaleString("en-IN")} towns`,
+            `${INDIA_SPATIAL.inhabitedVillages.toLocaleString("en-IN")} inhabited villages · ${INDIA_SPATIAL.uninhabitedVillages.toLocaleString("en-IN")} standing empty`,
+            `Urban share ${INDIA_2011.urbanSharePercent}% · average density ${INDIA_2011.density} per km²`,
+            `Scheduled Tribe ${INDIA_2011.stSharePercent}% · Scheduled Caste ${INDIA_2011.scSharePercent}% of the population`,
+          ].map((item) => (
+            <div
+              key={item}
+              className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-2.5 py-2 text-[10px] font-black uppercase leading-relaxed tracking-wide text-[var(--nb-text-2)]"
+            >
+              {item}
+            </div>
+          ))}
+        </dl>
       </div>
 
       <motion.div
