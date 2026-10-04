@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Check, ChevronUp, ShieldAlert, Trash2, Wrench, X } from "lucide-react";
+import { Check, ChevronUp, MapPin, ShieldAlert, Trash2, User, Wrench, X } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -35,9 +35,43 @@ interface Ticket {
   createdAt: number;
   aiTag: string;
   reporterEmail: string;
+  reporterName?: string | null;
+  reporterCity?: string | null;
+  reporterCountry?: string | null;
   storageId?: string | null;
   resolution?: string;
   resolvedAt?: number;
+}
+
+/**
+ * What to call the person behind a report.
+ *
+ * Reports filed before identity was captured, or by somebody who never filled
+ * in a profile, have no name. Falling back to the email's local part is
+ * deliberate: "pratyush20h" identifies a person to an official far better than
+ * "URBIS resident", and the full address is already on the card below.
+ */
+function reporterLabel(report: Ticket): string {
+  if (report.reporterName) return report.reporterName;
+  const local = report.reporterEmail.split("@")[0];
+  return local && local !== "anonymous" ? local : "URBIS resident";
+}
+
+/** Two-letter monogram for the avatar, from the display name. */
+function initials(label: string): string {
+  const parts = label.split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "");
+  return letters.join("") || "?";
+}
+
+/** Where they say they are. Falls back to the report's own district. */
+function reporterPlace(report: Ticket): string {
+  const parts = [report.reporterCity, report.reporterCountry].filter(
+    (p): p is string => Boolean(p && p.trim()),
+  );
+  if (parts.length > 0) return parts.join(", ");
+  if (report.district && report.district.trim()) return report.district;
+  return "Location not provided";
 }
 
 const STATUS_COLORS: Record<Ticket["status"], string> = {
@@ -62,28 +96,6 @@ export default function AdminTicketDesk() {
   const resolveIssue = useMutation(api.admin.resolveIssue);
   const upvoteIssue = useMutation(api.admin.upvoteIssue);
   const purgeAllIssues = useMutation(api.admin.purgeAllIssues);
-  const purgeOtherAdmins = useMutation(api.identity.purgeOtherAdmins);
-  const [purgingAdmins, setPurgingAdmins] = useState(false);
-  const [adminNote, setAdminNote] = useState<string | null>(null);
-
-  const handlePurgeAdmins = async () => {
-    setPurgingAdmins(true);
-    setAdminNote(null);
-    try {
-      const result = await purgeOtherAdmins();
-      setAdminNote(
-        `Removed ${result.removedGrants.length} extra grant(s) and cleared ` +
-          `${result.clearedRoles} legacy role flag(s). Sole admin: ` +
-          result.admins.join(", "),
-      );
-    } catch (error) {
-      setAdminNote(
-        error instanceof Error ? error.message : "Could not purge other admins",
-      );
-    } finally {
-      setPurgingAdmins(false);
-    }
-  };
 
   const [filter, setFilter] = useState<"open" | "all">("open");
   const [resolvingTicket, setResolvingTicket] = useState<string | null>(null);
@@ -153,23 +165,7 @@ export default function AdminTicketDesk() {
               Clear All
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => void handlePurgeAdmins()}
-            disabled={purgingAdmins}
-            title="Remove every admin grant except yours, and clear legacy role flags"
-            className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-2)] disabled:opacity-50"
-          >
-            <ShieldAlert className="size-3.5" strokeWidth={3} />
-            {purgingAdmins ? "Working…" : "Sole Admin"}
-          </button>
         </div>
-
-      {adminNote && (
-        <p className="border-b-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-3 text-xs font-bold leading-relaxed text-[var(--nb-text-2)]">
-          {adminNote}
-        </p>
-      )}
       </div>
 
       {/* Two-step confirmation, because this cannot be undone. The stored blob
@@ -215,7 +211,36 @@ export default function AdminTicketDesk() {
           </p>
         ) : (
           visible.map((report) => (
-            <article key={report.ticket} className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-3">
+            <article key={report.ticket} className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface)]">
+              {/*
+                Author block first, the way a social feed leads with who is
+                speaking. An official resolving this needed to know who filed
+                it and where they are before reading the complaint, and until
+                the report captured identity that information only existed as
+                a bare address line buried under the description.
+              */}
+              <header className="flex items-start gap-3 border-b-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] p-3">
+                <span
+                  aria-hidden="true"
+                  className="flex size-9 shrink-0 items-center justify-center border-2 border-[var(--nb-ink)] bg-[#10B981] text-xs font-black text-[#04110C]"
+                >
+                  {initials(reporterLabel(report))}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-black text-[var(--nb-text)]">
+                    {reporterLabel(report)}
+                  </p>
+                  <p className="flex items-center gap-1 truncate text-xs text-[var(--nb-text-muted)]">
+                    <MapPin className="size-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    <span className="truncate">{reporterPlace(report)}</span>
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
+                  {timeAgo(report.createdAt)}
+                </span>
+              </header>
+
+              <div className="p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="nb-chip bg-[#F8FAFC] text-black">{report.ticket}</span>
                 <span className="nb-chip" style={{ background: STATUS_COLORS[report.status], color: "#000" }}>
@@ -223,9 +248,6 @@ export default function AdminTicketDesk() {
                 </span>
                 <span className="nb-chip" style={{ background: report.tagColor, color: "#000" }}>
                   {report.tag}
-                </span>
-                <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-[var(--nb-text-dim)]">
-                  {timeAgo(report.createdAt)}
                 </span>
               </div>
 
@@ -258,6 +280,7 @@ export default function AdminTicketDesk() {
                 </span>
                 {/* The reporter's own address. Only an admin ever sees this. */}
                 <span className="text-[10px] font-bold text-[var(--nb-text-dim)]">
+                  <User className="mr-1 inline size-3" strokeWidth={3} aria-hidden="true" />
                   {report.reporterEmail}
                 </span>
                 <button
@@ -325,6 +348,7 @@ export default function AdminTicketDesk() {
                   )}
                 </div>
               )}
+              </div>
             </article>
           ))
         )}

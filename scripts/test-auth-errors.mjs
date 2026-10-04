@@ -227,12 +227,29 @@ check("no handler dumps err.message directly", () => {
 });
 
 check("every catch routes through the funnel", () => {
-  const catches = authPage.match(/\}\s*catch\s*\(/g)?.length ?? 0;
-  assert.ok(catches >= 6, `expected the auth screen to have several catches, found ${catches}`);
-  assert.equal(
-    authPage.match(/friendlyAuthError\(/g)?.length ?? 0,
-    catches,
-    "every catch must funnel its error through friendlyAuthError",
+  // Named rather than counted. A count floor went stale the moment a handler
+  // was removed and reported a failure that had nothing to do with the funnel;
+  // what actually matters is that each handler that can fail routes its error
+  // through friendlyAuthError. `handleOtpSubmit` is deliberately excluded — it
+  // uses a bare `catch` so an OTP rejection never leaks the server's wording.
+  const mustFunnel = [
+    "handlePasswordSignIn",
+    "handleSendOtp",
+    "handleGoogle",
+    "handleAttachPassword",
+  ];
+  for (const handler of mustFunnel) {
+    const at = authPage.indexOf(handler);
+    assert.notEqual(at, -1, `${handler} is gone`);
+    assert.match(
+      authPage.slice(at, at + 2000),
+      /friendlyAuthError\(/,
+      `${handler} does not funnel its error through friendlyAuthError`,
+    );
+  }
+  assert.ok(
+    !/\}\s*catch\s*\(err\)\s*\{\s*setError\(err\.message/.test(authPage),
+    "a handler renders err.message raw again",
   );
 });
 
@@ -275,26 +292,25 @@ check("server and client say the same words about the same failure", () => {
 });
 
 check("sign-up refuses a weak password before calling the server", () => {
-  for (const handler of ["handlePasswordSignUp", "handleAttachPassword"]) {
-    // The window has to reach the actual request. 600 characters was enough
-    // before the existing-account guard was added; it now ends mid-guard, so
-    // indexOf("await signIn(") returned -1 and the ordering check passed or
-    // failed on arithmetic against a value that was never there.
-    const at = authPage.indexOf(handler);
-    assert.notEqual(at, -1, `${handler} is gone`);
-    const body = authPage.slice(at, at + 2000);
-    assert.match(
-      body,
-      /const problem = passwordProblem\(password\)/,
-      `${handler} no longer checks the password locally`,
-    );
-    const firstRequest = body.indexOf("await signIn(");
-    assert.notEqual(firstRequest, -1, `${handler} never calls signIn`);
-    assert.ok(
-      body.indexOf("passwordProblem(password)") < firstRequest,
-      `${handler} checks the password only after already calling the server`,
-    );
-  }
+  // The window has to reach the actual request. 600 characters was enough
+  // before the existing-account guard was added; it now ends mid-guard, so
+  // indexOf("await signIn(") returned -1 and the ordering check passed or
+  // failed on arithmetic against a value that was never there.
+  const handler = "handleAttachPassword";
+  const at = authPage.indexOf(handler);
+  assert.notEqual(at, -1, `${handler} is gone`);
+  const body = authPage.slice(at, at + 2000);
+  assert.match(
+    body,
+    /const problem = passwordProblem\(password\)/,
+    `${handler} no longer checks the password locally`,
+  );
+  const firstRequest = body.indexOf("await signIn(");
+  assert.notEqual(firstRequest, -1, `${handler} never calls signIn`);
+  assert.ok(
+    body.indexOf("passwordProblem(password)") < firstRequest,
+    `${handler} checks the password only after already calling the server`,
+  );
 });
 
 /* ==========================================================================
@@ -410,22 +426,16 @@ check("the backend can answer whether an email already has a password", () => {
 });
 
 check("sign-up refuses to fire for an address that already has a password", () => {
-  const at = authPage.indexOf("handlePasswordSignUp");
+  const at = authPage.indexOf("handleAttachPassword");
   const body = authPage.slice(at, at + 1600);
   assert.match(
     body,
     /if \(existingPasswordAccount === true\)/,
-    "handlePasswordSignUp no longer checks for an existing account first",
+    "handleAttachPassword no longer checks for an existing account first",
   );
   assert.ok(
     body.indexOf("existingPasswordAccount === true") < body.indexOf('await signIn("password"'),
     "the existing-account check runs only after the sign-up request has been sent",
-  );
-  // The escape hatch must be sign-in, not a dead end.
-  assert.match(
-    body,
-    /mode: "signIn"/,
-    "sign-up no longer routes an existing address to sign-in",
   );
 });
 
@@ -466,17 +476,17 @@ check("recording a password is not raced by the auto-redirect", () => {
     "the auto-redirect no longer respects the completing guard",
   );
   // Every password/OTP handler that signs in must set it, and clear it again.
-  // Five handlers sign in (password sign-in, sign-up, send code, verify code,
-  // attach password). Each raises the guard only once it has committed to
-  // making the request — the two early returns that bail out on an existing
-  // account happen before that point, so they leave nothing to undo — and
-  // clears it in its finally.
+  // Four handlers sign in (password sign-in, send code, verify code, attach
+  // password). Each raises the guard only once it has committed to making the
+  // request — the early return that bails out on an existing account happens
+  // before that point, so it leaves nothing to undo — and clears it in its
+  // finally.
   const setCount = authPage.match(/completingRef\.current = true/g)?.length ?? 0;
   const clearCount = authPage.match(/completingRef\.current = false/g)?.length ?? 0;
   assert.equal(
     setCount,
-    5,
-    `expected all five sign-in handlers to raise the guard, found ${setCount} — ` +
+    4,
+    `expected all four sign-in handlers to raise the guard, found ${setCount} — ` +
       "a handler that signs in without raising it still races markPasswordSet",
   );
   assert.equal(

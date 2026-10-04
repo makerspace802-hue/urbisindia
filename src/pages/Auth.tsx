@@ -35,7 +35,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
   redirectAfterAuth?: string;
@@ -53,7 +53,7 @@ function resolveRedirectAfterAuth(
 
 type Step =
   | { kind: "choose" }
-  | { kind: "password"; mode: "signIn" | "signUp"; email: string }
+  | { kind: "password"; email: string }
   | { kind: "email" }
   | { kind: "otp"; email: string }
   | { kind: "verified"; email: string };
@@ -72,10 +72,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  
 
   const markPasswordSet = useMutation(api.identity.markPasswordSet);
-  const bootstrapFirstAdmin = useMutation(api.identity.bootstrapFirstAdmin);
   const syncProfile = useMutation(api.profile.syncProfileAcrossProviders);
 
   /**
@@ -139,57 +138,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         ),
       );
       setPassword("");
-    } finally {
-      completingRef.current = false;
-      setIsLoading(false);
-    }
-  };
-
-  /** Create a brand new account with a password. */
-  const handlePasswordSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (step.kind !== "password") return;
-    // Checked here as well as on the server purely to save the round trip and
-    // to keep what they typed on screen; the server stays the authority.
-    const problem = passwordProblem(password);
-    if (problem !== null) {
-      setError(problem);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    // The address already has a password account. Re-running sign-up cannot
-    // succeed: @convex-dev/auth throws "Account <email> already exists" as a
-    // plain Error whenever the stored secret does not match, and Convex strips
-    // that message before it reaches the browser. Route to sign-in instead of
-    // attempting a request that is known to fail. This check sits before the
-    // request — and before the redirect guard is raised — so bailing out
-    // leaves nothing to undo.
-    if (existingPasswordAccount === true) {
-      setIsLoading(false);
-      setError(
-        "That email already has an account. Sign in below, or email yourself a code if you have forgotten the password.",
-      );
-      setPassword("");
-      setStep({ kind: "password", mode: "signIn", email: step.email });
-      return;
-    }
-    completingRef.current = true;
-    try {
-      await signIn("password", {
-        flow: "signUp",
-        email: step.email,
-        password,
-      });
-      await markPasswordSet();
-      navigate(redirect);
-    } catch (err) {
-      setError(
-        friendlyAuthError(
-          err,
-          "Could not create an account with those details. If you already have one, sign in instead.",
-        ),
-      );
     } finally {
       completingRef.current = false;
       setIsLoading(false);
@@ -289,28 +237,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  /**
-   * Recover admin rights. Only succeeds while no admin has ever been granted,
-   * so this cannot be used to hand admin to whoever signs up next. Existing
-   * admins (holding `role: "admin"` on their row) can also use it to lock in
-   * an email-keyed grant.
-   */
-  const handleClaimAdmin = async () => {
-    setIsLoading(true);
-    setError(null);
-    setInfo(null);
-    try {
-      await bootstrapFirstAdmin();
-      setInfo("Admin rights are now tied to your email. They will follow you to every device and sign-in method.");
-    } catch (err) {
-      setError(friendlyAuthError(err, "Could not claim admin rights."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--nb-bg)] px-4 py-8">
+      {/*
+        A way off this page that does not depend on which step is showing.
+        Every step except "choose" had a Back button that returned to the step
+        before it, but "choose" itself had no way back to the site — so the
+        first thing a visitor could do, pick a method, stranded them here.
+      */}
+      <Link
+        to="/"
+        className="nb-btn mb-4 justify-start bg-[var(--nb-surface)] px-3 py-1.5 text-xs text-[var(--nb-text-muted)]"
+      >
+        <ArrowLeft className="size-3.5" strokeWidth={3} />
+        Back to site
+      </Link>
       <Card className="w-full max-w-md gap-4 rounded-none border-2 border-[var(--nb-ink)] shadow-[6px_6px_0_0_var(--nb-ink)]">
         {step.kind === "choose" && (
           <>
@@ -344,7 +285,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <span className="h-0.5 flex-1 bg-[var(--nb-ink)] opacity-30" />
               </div>
               <NbButton
-                onClick={() => setStep({ kind: "password", mode: "signIn", email: "" })}
+                onClick={() => setStep({ kind: "password", email: "" })}
                 disabled={isLoading}
               >
                 <KeyRound className="mr-2 h-4 w-4" />
@@ -367,21 +308,13 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         )}
 
         {step.kind === "password" && (
-          <form
-            onSubmit={
-              step.mode === "signIn"
-                ? handlePasswordSignIn
-                : handlePasswordSignUp
-            }
-          >
+          <form onSubmit={handlePasswordSignIn}>
             <CardHeader className="text-center">
               <CardTitle className="text-lg font-black uppercase text-[var(--nb-text)]">
-                {step.mode === "signIn" ? "Welcome back" : "Create your account"}
+                Welcome back
               </CardTitle>
               <CardDescription className="text-[var(--nb-text-muted)]">
-                {step.mode === "signIn"
-                  ? "Sign in from any device, no emailed code needed"
-                  : "Pick a password so you never wait on an inbox again"}
+                Sign in from any device, no emailed code needed
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -409,31 +342,35 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 onChange={(e) => setPassword(e.target.value)}
               />
               {error && <ErrorText>{error}</ErrorText>}
+              {/*
+                There is deliberately no "Create one" toggle here.
+
+                This screen used to double as the sign-up form, which meant an
+                account could be created — and a password chosen — without the
+                address ever being verified. Every sign-up now goes through the
+                emailed code first and sets a password afterwards, so this step
+                only signs people in. The pointer below keeps somebody without
+                an account from being stranded; it is a route to verification,
+                not a way around it.
+              */}
               <p className="text-xs text-[var(--nb-text-dim)]">
-                {step.mode === "signIn" ? "No password yet? " : "Already have an account? "}
+                No account yet?{" "}
                 <button
                   type="button"
                   className="font-black underline"
                   onClick={() => {
                     setPassword("");
                     setError(null);
-                    setStep({
-                      kind: "password",
-                      mode: step.mode === "signIn" ? "signUp" : "signIn",
-                      email: step.email,
-                    });
+                    setStep({ kind: "email" });
                   }}
                 >
-                  {step.mode === "signIn" ? "Create one" : "Sign in instead"}
+                  Get a code by email
                 </button>
               </p>
             </CardContent>
-            {/* `gap-4`, not `gap-2`: every `.nb-btn` carries a 4px offset
-                shadow (6px on hover) that extends past its own box, so a 8px
-                gap left the shadow touching the button below it. */}
             <CardFooter className="flex-col gap-3">
               <NbButton type="submit" disabled={isLoading} loading={isLoading}>
-                {step.mode === "signIn" ? "Sign in" : "Create account"}
+                Sign in
               </NbButton>
               <Button
                 type="button"
@@ -579,11 +516,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </CardHeader>
               <CardContent className="space-y-3">
                 {error && <ErrorText>{error}</ErrorText>}
-                {info && (
-                  <p className="border-2 border-[var(--nb-gain)] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[var(--nb-text)]">
-                    {info}
-                  </p>
-                )}
                 <p className="text-center text-xs text-[var(--nb-text-dim)]">
                   Signed in as {step.email}
                 </p>
@@ -602,7 +534,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     setError(null);
                     setStep({
                       kind: "password",
-                      mode: "signIn",
                       email: step.email,
                     });
                   }}
@@ -641,11 +572,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   onChange={(e) => setPassword(e.target.value)}
                 />
                 {error && <ErrorText>{error}</ErrorText>}
-                {info && (
-                  <p className="border-2 border-[var(--nb-gain)] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[var(--nb-text)]">
-                    {info}
-                  </p>
-                )}
               </form>
             </CardContent>
             <CardFooter className="flex-col gap-3">
@@ -658,24 +584,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <Lock className="mr-2 h-4 w-4" />
                 Set password and continue
               </NbButton>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-2 border-[var(--nb-ink)] text-[var(--nb-text)]"
-                onClick={handleClaimAdmin}
-                disabled={isLoading}
-              >
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                Claim admin for {step.email}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full text-[var(--nb-text-muted)]"
-                onClick={() => navigate(redirect)}
-              >
-                Skip for now
-              </Button>
             </CardFooter>
             </>
           ))}

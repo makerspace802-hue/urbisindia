@@ -41,22 +41,19 @@ function isSeedAdmin(key: string): boolean {
 /**
  * Is this email an admin?
  *
- * Reads the `adminGrants` table by index, so it is a single indexed lookup and
- * works for a signed-in user, a token-less service call, or the admin panel
- * listing other people's grants.
+ * The seed list in this file is the ONLY source of admin rights. It used to
+ * also honour a row in `adminGrants`, which meant admin was a database value
+ * rather than a code value: anybody with dashboard access could insert a row
+ * and mint themselves an admin, and the app could never tell that apart from
+ * a grant the owner intended. With the seed being the single source, changing
+ * who administers this deployment is a code edit and nothing else.
+ *
+ * `ctx` is gone for the same reason — there is nothing left to look up.
  */
 export async function isAdminEmail(
-  ctx: QueryCtx,
   email: string | undefined | null,
 ): Promise<boolean> {
-  const key = normaliseEmail(email);
-  if (!key) return false;
-  if (isSeedAdmin(key)) return true;
-  const grant = await ctx.db
-    .query("adminGrants")
-    .withIndex("by_email", (q) => q.eq("email", key))
-    .first();
-  return grant !== null;
+  return isSeedAdmin(normaliseEmail(email));
 }
 
 /**
@@ -78,7 +75,7 @@ export async function requireAdminEmail(
   if (!user) throw new Error("No user record");
 
   const email = normaliseEmail(user.email);
-  if (await isAdminEmail(ctx, email)) return { userId, email };
+  if (await isAdminEmail(email)) return { userId, email };
   throw new Error("Admins only");
 }
 
@@ -90,31 +87,24 @@ export const isAdmin = query({
     if (!userId) return false;
     const user = await ctx.db.get(userId);
     if (!user) return false;
-    return isAdminEmail(ctx, user.email);
+    return isAdminEmail(user.email);
   },
 });
 
-/** Every current admin grant, newest first. Admin panel listing. */
+/**
+ * Who administers this deployment.
+ *
+ * Read-only by construction: the seed is the only place an admin can come
+ * from, so this reports exactly what `isAdmin` will allow and nothing more.
+ */
 export const listAdmins = query({
   args: {},
   handler: async (ctx) => {
     await requireAdminEmail(ctx);
-    const grants = await ctx.db.query("adminGrants").collect();
-    const rows = grants.map((g) => ({
-      email: g.email,
-      createdAt: g.createdAt,
-      grantedBy: g.grantedBy,
-      seeded: false,
+    return SEED_ADMIN_EMAILS.map((email) => ({
+      email,
+      grantedBy: "seed",
     }));
-    // Show the seeded owner even though there is no row for them, otherwise
-    // the admin panel would disagree with what `isAdmin` actually allows.
-    for (const email of SEED_ADMIN_EMAILS) {
-      const normalised = email.toLowerCase();
-      if (!rows.some((r) => normaliseEmail(r.email) === normalised)) {
-        rows.push({ email, createdAt: 0, grantedBy: "seed", seeded: true });
-      }
-    }
-    return rows.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
@@ -129,117 +119,43 @@ export const listAdmins = query({
  */
 
 /**
- * Remove an admin grant.
+ * Revoke an admin.
  *
- * Retained, and refuses to remove the seeded owner. Without that guard a single
- * admin could revoke themselves and leave the deployment with nobody able to
- * reach the admin desk, because the seed is the only recovery path left once
- * `grantAdminByEmail` is gone.
+ * Deleted. Every way of changing the admin set is gone from the backend, not
+ * merely hidden in the UI: this, `bootstrapFirstAdmin` and `purgeOtherAdmins`
+ * all used to be callable by any signed-in admin, which meant the admin set
+ * was mutable at runtime by whoever happened to be signed in. The only way to
+ * change it now is to edit `SEED_ADMIN_EMAILS` above and deploy.
  */
-export const revokeAdminByEmail = mutation({
-  args: { email: v.string() },
-  handler: async (ctx, args) => {
-    await requireAdminEmail(ctx);
-    const email = normaliseEmail(args.email);
-    if (isSeedAdmin(email)) {
-      throw new Error(
-        "This is the seeded owner account and cannot be revoked from the app. " +
-          "Remove the address from SEED_ADMIN_EMAILS in identity.ts and deploy.",
-      );
-    }
-    const existing = await ctx.db
-      .query("adminGrants")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
-    if (existing) await ctx.db.delete(existing._id);
-    return email;
-  },
-});
 
 /**
- * Promote the signed-in caller's own email to admin, but only while no admin
- * exists at all.
+ * Claim admin for yourself.
  *
- * This is the recovery path, not a way to add admins: if the seeded owner can
- * never sign in, this lets the first person to claim admin restore the
- * deployment. It is deliberately hard to abuse — once any admin exists, nobody
- * can self-promote, and because the owner is seeded in code there is always an
- * admin, so in practice this only fires if the seed is also removed.
+ * Deleted, and this was the serious one. It was reachable from the sign-up
+ * screen by anybody who reached the "you are verified" step, and it granted
+ * admin to the caller whenever the `adminGrants` table happened to be empty.
+ * With the seed now the only source of admin rights the table is never empty,
+ * so even the original guard could not have saved it.
  */
-export const bootstrapFirstAdmin = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthenticated");
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("No user record");
 
-    const email = normaliseEmail(user.email);
-    if (!email) throw new Error("Sign in with an email address first");
-
-    const alreadyGranted = await ctx.db
-      .query("adminGrants")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
-    if (alreadyGranted) return email;
-
-    const anyGrant = await ctx.db.query("adminGrants").first();
-    if (anyGrant) {
-      throw new Error(
-        "This deployment has a single seeded administrator. " +
-          "There is no way to add a second admin.",
-      );
-    }
-
-    await ctx.db.insert("adminGrants", {
-      email,
-      grantedBy: "bootstrap",
-      createdAt: Date.now(),
-    });
-    return email;
-  },
-});
+/**
+ * Strip admin grants and legacy role flags.
+ *
+ * Deleted along with the "Sole Admin" button that called it. It could only
+ * ever remove rights, but with no way to add them it had nothing left to do,
+ * and leaving a mutation that mutates the admin set contradicts the rule that
+ * only the backend can.
+ */
 
 /**
  * Strip every admin grant except the seeded owner, and clear the legacy
  * `role: "admin"` flag off every user row.
  *
- * Admin is meant to be a single account. Two things could break that: rows in
- * `adminGrants` granted earlier through the admin panel, and the old
- * `role: "admin"` flag on a user row. The second is why this exists — the
- * flag is no longer honoured by any check, but leaving it set means the data
- * still claims somebody is an admin, and any future check that reads it would
- * re-admit them.
- *
- * Requires the seeded owner, so nobody else can widen or narrow the admin set.
+ * DELETED — see the note above. The "Sole Admin" button in the admin ticket
+ * desk called this, which meant the admin set could be edited by whoever was
+ * signed in at the time. It is no longer a mutation, and the button is gone
+ * from the UI.
  */
-export const purgeOtherAdmins = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdminEmail(ctx);
-
-    const grants = await ctx.db.query("adminGrants").collect();
-    const removedGrants: string[] = [];
-    for (const grant of grants) {
-      if (isSeedAdmin(normaliseEmail(grant.email))) continue;
-      removedGrants.push(grant.email);
-      await ctx.db.delete(grant._id);
-    }
-
-    // Clear the legacy flag everywhere. A user row can exist per provider, so
-    // one person may have several; each is cleared separately.
-    const users = await ctx.db.query("users").collect();
-    let clearedRoles = 0;
-    for (const user of users) {
-      if (user.role === "admin") {
-        await ctx.db.patch(user._id, { role: undefined });
-        clearedRoles++;
-      }
-    }
-
-    return { removedGrants, clearedRoles, admins: SEED_ADMIN_EMAILS };
-  },
-});
 
 /**
  * Record that this email now has a password, so the UI can show
@@ -335,7 +251,7 @@ export const passwordStatus = query({
     return {
       email,
       hasPassword: record !== null,
-      isAdmin: await isAdminEmail(ctx, email),
+      isAdmin: await isAdminEmail(email),
     };
   },
 });

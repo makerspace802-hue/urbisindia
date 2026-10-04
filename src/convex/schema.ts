@@ -65,6 +65,19 @@ const schema = defineSchema(
       createdAt: v.number(),
       aiTag: v.string(),
       reporterEmail: v.string(),
+      /**
+       * Who filed it and from where, copied off the signed-in account at the
+       * moment of submission.
+       *
+       * Stored rather than joined at read time on purpose: a profile edit later
+       * must not silently rewrite who a historical report says came from, and
+       * a report that outlives the account still has to show an author. Every
+       * field is optional because a report filed before this existed, or by
+       * somebody who never filled in their profile, has no value to copy.
+       */
+      reporterName: v.optional(v.string()),
+      reporterCity: v.optional(v.string()),
+      reporterCountry: v.optional(v.string()),
       resolvedBy: v.optional(v.string()),
       resolvedAt: v.optional(v.number()),
       resolution: v.optional(v.string()),

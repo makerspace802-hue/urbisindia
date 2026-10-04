@@ -125,6 +125,9 @@ export const listAllIssues = query({
       createdAt: row.createdAt,
       aiTag: row.aiTag,
       reporterEmail: row.reporterEmail,
+      reporterName: row.reporterName ?? null,
+      reporterCity: row.reporterCity ?? null,
+      reporterCountry: row.reporterCountry ?? null,
       resolution: row.resolution,
       resolvedAt: row.resolvedAt,
     }));
@@ -142,6 +145,12 @@ export const retrieveIssueByTicket = query({
     return row ?? null;
   },
 });
+
+/** Empty, whitespace-only or missing profile text all become "not provided". */
+function trimmed(value: string | undefined): string | undefined {
+  const clean = value?.trim();
+  return clean ? clean : undefined;
+}
 
 /** File a new citizen report and hand back the generated ticket number. */
 export const submitIssue = mutation({
@@ -211,6 +220,13 @@ export const submitIssue = mutation({
       createdAt: Date.now(),
       aiTag: args.aiTag,
       reporterEmail: user?.email ?? "anonymous",
+      // Snapshotted from the profile so the desk can show who filed the
+      // report and where they are, instead of only an address. Empty strings
+      // are stored as absent so "no city" and "city is an empty string" stay
+      // the same thing on the way out.
+      reporterName: trimmed(user?.name),
+      reporterCity: trimmed(user?.city),
+      reporterCountry: trimmed(user?.country),
       storageId: args.storageId,
     });
 

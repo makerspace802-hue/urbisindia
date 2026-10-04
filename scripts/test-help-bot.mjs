@@ -588,16 +588,22 @@ check("email is the only route to admin", () => {
     /export const grantAdmin = mutation/.test(admin) === false,
     "admin.grantAdmin can still mint a second admin",
   );
-  // Revoking must not be able to remove the seeded owner and lock everyone out.
-  const revoke = identity.slice(identity.indexOf("export const revokeAdminByEmail"));
+  // Revoking is no longer a guarded operation, because it is no longer an
+  // operation. `revokeAdminByEmail` and `purgeOtherAdmins` used to be required
+  // by this check: it demanded a way to strip admin from other accounts, which
+  // is precisely the runtime mutability that has since been removed. The admin
+  // set now comes from SEED_ADMIN_EMAILS alone, so the correct assertion is
+  // the opposite of what was here — neither may exist, and nothing may read
+  // the grant table.
+  for (const gone of ["revokeAdminByEmail", "purgeOtherAdmins"]) {
+    assert.ok(
+      new RegExp(`export const ${gone} = mutation`).test(identity) === false,
+      `${gone} is back; the admin set must only change by editing the seed`,
+    );
+  }
   assert.ok(
-    /isSeedAdmin\(email\)/.test(revoke),
-    "revokeAdminByEmail could remove the seeded owner and lock out every admin",
-  );
-  // And there has to be a way to clear grants left over from the old setup.
-  assert.ok(
-    /export const purgeOtherAdmins = mutation/.test(identity),
-    "no way remains to remove admin rights from other accounts",
+    /ctx\.db\.query\("adminGrants"\)/.test(identity) === false,
+    "identity.ts reads adminGrants again, so admin is a stored value",
   );
 });
 
