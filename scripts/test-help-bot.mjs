@@ -521,6 +521,108 @@ check("every city in the redirect map points at a real place", () => {
   }
 });
 
+check("questions about getting around the site are answered, not refused", () => {
+  // Regression: "how do i navigate through the website" scored a single point
+  // against the two-point bar and was refused, even though navigation is
+  // exactly what the pages intent answers.
+  const navigation = [
+    "how do i navigate through the website",
+    "how do I navigate the site",
+    "how can i navigate",
+    "how do i get around the site",
+    "how do i move around this website",
+    "how do i find my way around here",
+    "where do i go",
+    "whats the menu",
+    "list the routes",
+  ];
+  for (const question of navigation) {
+    const reply = kb.ask(question);
+    assert.ok(
+      !reply.declined,
+      `refused a navigation question: "${question}"`,
+    );
+    // And it must answer with the real routes, not some other intent.
+    for (const page of kb.SITE_PAGES) {
+      assert.ok(
+        reply.text.includes(page.route),
+        `"${question}" answered without listing ${page.route}`,
+      );
+    }
+  }
+});
+
+check("lowering the bar for navigation did not let anything else through", () => {
+  // The pages intent now clears on one keyword, so the off-site guard is the
+  // thing standing between a visitor and a confident wrong answer.
+  for (const question of [
+    "who won the cricket match",
+    "translate good morning into french",
+    "what should i eat for dinner",
+    "what is the price of gold",
+  ]) {
+    const reply = kb.ask(question);
+    assert.ok(
+      reply.declined,
+      `answered something off-site: "${question}"`,
+    );
+  }
+});
+
+check("a navigation word cannot smuggle the bot into inventing content", () => {
+  // "Navigate to a PDF of my bank statement" contains a navigation keyword, so
+  // it reaches the pages intent. That is acceptable only because the answer is
+  // the real route list — what must never happen is a bot claiming to hold
+  // something it does not.
+  const reply = kb.ask("navigate to a pdf of my bank statement");
+  assert.ok(
+    !/bank statement|statement|pdf|download/i.test(reply.text),
+    "it must not pretend to hold a document it does not have",
+  );
+  for (const page of kb.SITE_PAGES) {
+    assert.ok(
+      reply.text.includes(page.route),
+      "anything it does answer must be the real site contents",
+    );
+  }
+});
+
+check("the weather answer explains the widget without forecasting", () => {
+  // This one is deliberately answered rather than refused: the widget is on
+  // site. But it must hand back no forecast and no figure for anywhere else,
+  // which is the line a helpful-sounding bot would be tempted to cross.
+  const reply = kb.ask("what is the weather in mumbai tomorrow");
+  assert.ok(!reply.declined, "the widget is on site, so it should answer");
+  assert.match(reply.text, /can't tell you the weather/i);
+  assert.match(reply.text, /can't forecast/i);
+  assert.ok(
+    !/\d+\s*(°|degrees)/.test(reply.text),
+    "it must not quote a temperature it does not have",
+  );
+});
+
+check("the bot never leaves a second hidden copy of an answer in the DOM", () => {
+  const source = codeOnly("src/components/HelpBot.tsx");
+  // `sr-only` clips rather than removes, so a permanent hidden copy would stay
+  // selectable and every copied reply would come out duplicated. The full text
+  // must therefore live inside the isTyping branch, with a plain fallback.
+  const branch = source.indexOf("{isTyping(message) ? (");
+  assert.ok(branch !== -1, "the reveal must branch on isTyping");
+  const srOnly = source.indexOf('className="sr-only"', branch);
+  assert.ok(
+    srOnly > branch,
+    "the sr-only full-text copy must sit inside the isTyping branch",
+  );
+  // Past the sr-only copy there must be a plain-text fallback, not a second
+  // unconditional render of message.text.
+  const tail = source.slice(srOnly, srOnly + 900);
+  assert.match(
+    tail,
+    /\)\s*:\s*\(?\s*message\.text\s*\)?\s*\)/,
+    "the non-typing branch must render message.text once, plainly",
+  );
+});
+
 check("no real answer takes long enough to lose the reader", () => {
   // Measured against the real answers, punctuation pauses included. An earlier
   // fixed rate took 17s on the longest one, which fails this.
@@ -598,10 +700,17 @@ check("revealing a finished or empty answer is a no-op", () => {
 
 check("the bot streams only its own answers", () => {
   const source = codeOnly("src/components/HelpBot.tsx");
-  // A visitor's own message must appear the instant they send it.
-  assert.ok(
-    /from === "urbis" && revealing\?\.id === message\.id/.test(source),
+  // A visitor's own message must appear the instant they send it. Matched
+  // across line breaks, because the guard is written one clause per line.
+  assert.match(
+    source,
+    /const isTyping = \(message: Message\) =>\s*message\.from === "urbis" &&/,
     "the reveal must be gated on the answer being from the bot",
+  );
+  assert.match(
+    source,
+    /revealing\?\.id === message\.id &&\s*revealing\.shown < message\.text\.length/,
+    "the reveal must be gated on the answer being the one currently arriving",
   );
   assert.ok(
     source.includes("prefers-reduced-motion"),

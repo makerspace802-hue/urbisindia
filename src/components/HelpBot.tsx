@@ -176,12 +176,6 @@ export default function HelpBot() {
 
   const lastIndex = messages.length - 1;
 
-  /** Text as it should read right now — a partial slice while a reply lands. */
-  const visibleText = (message: Message) =>
-    message.from === "urbis" && revealing?.id === message.id
-      ? message.text.slice(0, revealing.shown)
-      : message.text;
-
   /** True only while this particular answer is still arriving. */
   const isTyping = (message: Message) =>
     message.from === "urbis" &&
@@ -238,13 +232,24 @@ export default function HelpBot() {
                 ) : (
                   <div key={message.id} className="max-w-[92%]">
                     <p className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-2.5 py-1.5 text-xs font-semibold leading-relaxed whitespace-pre-line text-[var(--nb-text-2)]">
-                      {/* The full answer is exposed once, up front, while the
-                          animated slice is hidden from assistive tech. Without
-                          this split a screen reader announces the reply one
-                          character at a time, which makes it unusable. */}
-                      <span className="sr-only">{message.text}</span>
-                      <span aria-hidden="true">{visibleText(message)}</span>
-                      {isTyping(message) && <span className="nb-caret" />}
+                      {/* While the answer is streaming, the full text is exposed
+                          once for assistive tech and the animated slice is
+                          hidden from it, or a screen reader reads the reply one
+                          character at a time. Once it has landed the hidden copy
+                          is dropped: `sr-only` clips rather than removes, so
+                          keeping it would leave a second copy selectable and
+                          selecting the reply would yield it twice. */}
+                      {isTyping(message) ? (
+                        <>
+                          <span className="sr-only">{message.text}</span>
+                          <span aria-hidden="true">
+                            {message.text.slice(0, revealing?.shown ?? 0)}
+                          </span>
+                          <span className="nb-caret" />
+                        </>
+                      ) : (
+                        message.text
+                      )}
                     </p>
                     {isTyping(message) && (
                       <button

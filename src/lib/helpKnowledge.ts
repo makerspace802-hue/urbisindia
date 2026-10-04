@@ -656,12 +656,24 @@ const INTENTS: readonly Intent[] = [
       "menu",
       "navigate",
       "navigation",
+      "navigate through",
+      "navigate around",
+      "get around",
+      "move around",
+      "find my way",
+      "way around",
       "links",
       "route",
       "routes",
       "go to",
       "where is",
+      "where do i go",
     ],
+    // "How do I navigate through the website?" contains exactly one of these
+    // words and is unmistakably a question about getting around the site, so
+    // the two-point default bar rejected it. The bar exists to stop a stray
+    // "report" or "hi" firing an answer; none of these words is ambiguous.
+    minScore: 1,
     run: () => ({
       text:
         `URBIS India has ${SITE_PAGES.length} routes:\n\n` +
