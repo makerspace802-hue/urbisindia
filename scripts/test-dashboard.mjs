@@ -198,11 +198,43 @@ check("a stored preference cannot break the dashboard", () => {
 });
 
 check("a signed-out visitor keeps the dashboard they had", () => {
-  // Customisation is opt-in: the default is the four India-wide cards, and the
-  // state falls back to the located one rather than being pinned.
+  // Customisation is opt-in: the default is the four India-wide cards.
   assert.equal(d.DEFAULT_PREFS.state, null);
   assert.equal(d.DEFAULT_PREFS.showNational, true);
   assert.deepEqual(d.DEFAULT_PREFS.metrics, d.DEFAULT_METRICS);
+});
+
+check("personalisation is hidden from guests, not merely disabled", () => {
+  // A guest used to get a Customise button whose changes reverted on reload,
+  // which read as broken. Both the control and the readings it drives are now
+  // behind sign-in, so the guest dashboard is exactly what it was before any
+  // of this existed.
+  const source = readFileSync("src/pages/CommandCenter.tsx", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+
+  assert.match(
+    source,
+    /\{isAuthenticated && \(\s*<button[\s\S]{0,400}?Customise/,
+    "the Customise button is not gated on being signed in",
+  );
+  assert.match(
+    source,
+    /isAuthenticated && customising && \(\s*<DashboardCustomiser/,
+    "the customiser panel can open without being signed in",
+  );
+  // The readings must not be derived for a guest either, or a guest whose
+  // browser held a stale preference would still see personalised cards.
+  assert.match(
+    source,
+    /const targetState = isAuthenticated \? \(prefs\?\.state \?\? null\) : null/,
+    "a guest can still resolve a personalised state",
+  );
+  assert.match(
+    source,
+    /isAuthenticated\s*\?\s*\(prefs\?\.metrics/,
+    "the reading list is built for guests",
+  );
 });
 
 check("every metric in the catalogue is reachable through normalisePrefs", () => {

@@ -1,7 +1,7 @@
 import { RetroMarquee, RetroSwitcher } from "@/components/Retro";
 import { LocationPulse } from "@/components/LocationPulse";
 import { PLACE_FALLBACK } from "@/lib/geo";
-import { heatFill, HEAT_NEUTRAL, textFor } from "@/lib/heatScale";
+import { heatFill, HEAT_NEUTRAL } from "@/lib/heatScale";
 import { useLocation } from "@/lib/locationContext";
 import {
   COMMUTE,

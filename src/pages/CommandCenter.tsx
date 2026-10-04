@@ -19,7 +19,6 @@ import {
   readMetric,
   type MetricReading,
 } from "@/lib/dashboardPreferences";
-import { useLocation } from "@/lib/locationContext";
 import { useQuery } from "convex/react";
 import { motion } from "framer-motion";
 import { SlidersHorizontal } from "lucide-react";
@@ -177,26 +176,40 @@ export default function CommandCenter() {
    * Personalisation.
    *
    * `prefs.state` is null until the resident picks one, and until then the
-   * cards fall back to the located state, then to India. Every figure comes
-   * from `readMetric`, which returns null for a metric the tables do not hold —
-   * that card is dropped rather than shown as a zero.
+   * cards are aimed at the state the account chose. Every figure comes from
+   * `readMetric`, which returns null for a metric the tables do not hold — that
+   * card is dropped rather than shown as a zero.
    */
   const { isAuthenticated } = useAuth();
   const profile = useQuery(api.profile.myProfile);
   const prefs = useQuery(api.dashboard.myDashboard);
-  const { state: located } = useLocation();
   const [customising, setCustomising] = useState(false);
 
-  const targetState = prefs?.state ?? located ?? null;
-  const readings: Array<{ id: string; def: (typeof METRIC_CATALOGUE)[number]; reading: MetricReading }> =
-    (prefs?.metrics ?? [])
-      .map((id) => {
-        if (!targetState) return null;
-        const def = metricDef(id);
-        const reading = readMetric(targetState, id);
-        return def && reading ? { id, def, reading } : null;
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  /**
+   * Personalisation is for accounts only.
+   *
+   * A guest sees the four India-wide cards and nothing else — no Customise
+   * button and no personalised readings. Earlier this let a guest browse a
+   * layout they could never save, which read as broken: the controls appeared,
+   * changed the page, and then reverted on reload. Since a layout only means
+   * anything when it is attached to an account, the whole feature is now behind
+   * sign-in rather than half-available.
+   */
+  const targetState = isAuthenticated ? (prefs?.state ?? null) : null;
+  const readings: Array<{
+    id: string;
+    def: (typeof METRIC_CATALOGUE)[number];
+    reading: MetricReading;
+  }> = isAuthenticated
+    ? (prefs?.metrics ?? [])
+        .map((id) => {
+          if (!targetState) return null;
+          const def = metricDef(id);
+          const reading = readMetric(targetState, id);
+          return def && reading ? { id, def, reading } : null;
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    : [];
 
   
 
@@ -207,18 +220,20 @@ export default function CommandCenter() {
           Dashboard
         </h1>
         <span className="nb-chip bg-[var(--nb-surface-2)] text-[var(--nb-text-muted)]">{today}</span>
-        <button
-          type="button"
-          onClick={() => setCustomising((value) => !value)}
-          aria-expanded={customising}
-          className="nb-btn bg-[#06B6D4] text-[#03151A]"
-        >
-          <SlidersHorizontal className="size-4" strokeWidth={3} />
-          Customise
-        </button>
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => setCustomising((value) => !value)}
+            aria-expanded={customising}
+            className="nb-btn bg-[#06B6D4] text-[#03151A]"
+          >
+            <SlidersHorizontal className="size-4" strokeWidth={3} />
+            Customise
+          </button>
+        )}
       </div>
 
-      {customising && (
+      {isAuthenticated && customising && (
         <DashboardCustomiser
           onClose={() => setCustomising(false)}
           signedIn={isAuthenticated}
