@@ -108,6 +108,55 @@ check("a metric the tables do not hold is dropped, not zeroed", () => {
   });
 });
 
+check("male and female counts are the published ones, not derived", () => {
+  // The sex ratio is published to one decimal place, so solving it back for
+  // the two counts lands a few people off: for Madhya Pradesh the derivation
+  // gives 37,612,309 against the published 37,612,306. These counts are read
+  // from Table A-1 instead, and the identity below is what would catch a
+  // regression to deriving them.
+  for (const profile of d.STATE_PROFILE) {
+    assert.equal(
+      profile.males + profile.females,
+      profile.population,
+      `${profile.name}: ${profile.males} + ${profile.females} != ${profile.population}`,
+    );
+  }
+
+  const mp = d.STATE_PROFILE.find((p) => p.name === "Madhya Pradesh");
+  assert.equal(mp.males, 37612306, "MP male count is not the published figure");
+  assert.equal(mp.females, 35014503, "MP female count is not the published figure");
+  assert.equal(d.readMetric("Madhya Pradesh", "males").value, "3,76,12,306");
+  assert.equal(d.readMetric("Madhya Pradesh", "females").value, "3,50,14,503");
+
+  // A derived figure would be off by 3 here, so assert the exact value rather
+  // than a rounded one.
+  const derived = Math.round(mp.population / (1 + 930.9 / 1000));
+  assert.notEqual(
+    d.STATE_PROFILE.find((p) => p.name === "Madhya Pradesh").males,
+    derived,
+    "the male count appears to have been derived from the ratio again",
+  );
+});
+
+check("men and women are on offer, since they were asked for by name", () => {
+  assert.ok(d.METRIC_CATALOGUE.some((m) => m.id === "males"), "no 'Men' metric");
+  assert.ok(d.METRIC_CATALOGUE.some((m) => m.id === "females"), "no 'Women' metric");
+  // And the other counts a resident can now put on their dashboard.
+  for (const id of ["rural", "urban", "literateCount", "illiterateCount", "scheduledCaste", "scheduledTribe"]) {
+    assert.ok(
+      d.METRIC_CATALOGUE.some((m) => m.id === id),
+      `${id} is missing from the catalogue`,
+    );
+    assert.ok(d.isMetricId(id), `${id} would not survive being saved`);
+  }
+  // "Literacy" now means the rate; the count has its own card. Two cards with
+  // the same title would be indistinguishable in the picker.
+  const titles = d.METRIC_CATALOGUE.map((m) => m.title);
+  assert.equal(new Set(titles).size, titles.length, "duplicate metric titles");
+  assert.ok(titles.includes("Literacy rate"));
+  assert.ok(titles.includes("Literate people"));
+});
+
 check("the sex ratio states which way round it counts", () => {
   const reading = d.readMetric("Madhya Pradesh", "sexRatio");
   // "Ratio of men to women" is ambiguous; the Census convention is females per

@@ -351,6 +351,12 @@ const stateProfile = stateGrowth
       population,
       ruralPopulation: population - urbanPopulation,
       urbanPopulation,
+      // Males and females are carried per state rather than derived from the
+      // sex ratio. The ratio is published to one decimal place, so solving it
+      // back for the two counts lands a few people off the published figure —
+      // for Madhya Pradesh, 37,612,309 against the real 37,612,306.
+      males: get(total, "TOT_M"),
+      females: get(total, "TOT_F"),
       households: get(total, "No_HH"),
       literate: get(total, "P_LIT"),
       illiterate: get(total, "P_ILL"),
@@ -642,6 +648,8 @@ export interface StateProfile {
   ruralPopulation: number;
   urbanPopulation: number;
   households: number;
+  males: number;
+  females: number;
   literate: number;
   illiterate: number;
   scheduledCaste: number;
@@ -662,7 +670,9 @@ ${stateProfile
         s.population,
       )}, ruralPopulation: ${n(s.ruralPopulation)}, urbanPopulation: ${n(
         s.urbanPopulation,
-      )}, households: ${n(s.households)}, literate: ${n(
+      )}, households: ${n(s.households)}, males: ${n(s.males)}, females: ${n(
+        s.females,
+      )}, literate: ${n(
         s.literate,
       )}, illiterate: ${n(s.illiterate)}, scheduledCaste: ${n(
         s.scheduledCaste,

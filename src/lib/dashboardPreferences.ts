@@ -33,7 +33,15 @@ export type MetricId =
   | "density"
   | "urbanShare"
   | "households"
-  | "area";
+  | "area"
+  | "males"
+  | "females"
+  | "rural"
+  | "urban"
+  | "literateCount"
+  | "illiterateCount"
+  | "scheduledCaste"
+  | "scheduledTribe";
 
 export interface MetricReading {
   /** Headline figure, already formatted for display. */
@@ -62,7 +70,15 @@ export const METRIC_CATALOGUE: readonly MetricDef[] = [
   { id: "area", title: "Area", unit: "square kilometres", group: "Place" },
   { id: "density", title: "Density", unit: "people per km²", group: "Place" },
   { id: "urbanShare", title: "Urban share", unit: "percent of population", group: "Place" },
-  { id: "literacy", title: "Literacy", unit: "percent of population", group: "People" },
+  { id: "rural", title: "Rural population", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "Place" },
+  { id: "urban", title: "Urban population", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "Place" },
+  { id: "males", title: "Men", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "People" },
+  { id: "females", title: "Women", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "People" },
+  { id: "literacy", title: "Literacy rate", unit: "percent of population", group: "People" },
+  { id: "literateCount", title: "Literate people", unit: `count, Census ${LAST_CENSUS_YEAR}`, group: "People" },
+  { id: "illiterateCount", title: "Illiterate people", unit: `count, Census ${LAST_CENSUS_YEAR}`, group: "People" },
+  { id: "scheduledCaste", title: "Scheduled Caste", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "People" },
+  { id: "scheduledTribe", title: "Scheduled Tribe", unit: `people, Census ${LAST_CENSUS_YEAR}`, group: "People" },
   { id: "sexRatio", title: "Sex ratio", unit: "females per 1,000 males", group: "People" },
 ] as const;
 
@@ -156,6 +172,52 @@ export function readMetric(state: string, id: MetricId): MetricReading | null {
       const value = profile?.literacyPercent;
       if (!present(value)) return null;
       return { value: `${value}%`, note: "literate population" };
+    }
+    case "males": {
+      const value = profile?.males;
+      if (!present(value)) return null;
+      return {
+        value: num(value),
+        note: `${((value / profile!.population) * 100).toFixed(2)}% of the population`,
+      };
+    }
+    case "females": {
+      const value = profile?.females;
+      if (!present(value)) return null;
+      return {
+        value: num(value),
+        note: `${((value / profile!.population) * 100).toFixed(2)}% of the population`,
+      };
+    }
+    case "rural": {
+      const value = profile?.ruralPopulation;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people living in villages" };
+    }
+    case "urban": {
+      const value = profile?.urbanPopulation;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people living in towns and cities" };
+    }
+    case "literateCount": {
+      const value = profile?.literate;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people counted as literate" };
+    }
+    case "illiterateCount": {
+      const value = profile?.illiterate;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people counted as illiterate" };
+    }
+    case "scheduledCaste": {
+      const value = profile?.scheduledCaste;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people in Scheduled Castes" };
+    }
+    case "scheduledTribe": {
+      const value = profile?.scheduledTribe;
+      if (!present(value)) return null;
+      return { value: num(value), note: "people in Scheduled Tribes" };
     }
     case "sexRatio": {
       const value = growth?.sexRatio2011;
