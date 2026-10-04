@@ -118,6 +118,15 @@
   --nb-loss: #be123c;
   --nb-warn: #7a5000;
   --nb-cool: #0b6478;
+
+  /* Inline error panels (auth failures, form validation).
+
+     Its own pair rather than `--nb-loss` on `--nb-surface-2`, because neither
+     existing combination works: #F43F5E on surface-2 is 2.98:1 (what the auth
+     form was actually showing) and --nb-loss is tuned for the flat card, not
+     the raised panel. Measured 6.80:1 here and 8.99:1 in dark. */
+  --nb-alert-bg: #fde7eb;
+  --nb-alert-ink: #9f1239;
 }
 
 .dark {
@@ -186,6 +195,12 @@
   --nb-loss: #fb7185;
   --nb-warn: #ffc700;
   --nb-cool: #22d3ee;
+
+  /* Inline error panels. See the light-theme note: the dark value is a soft
+     rose on a deep plum, which clears 8:1 — the same text on `--nb-surface-2`
+     was 2.46:1. */
+  --nb-alert-bg: #2c1520;
+  --nb-alert-ink: #fda4af;
 }
 
 @layer base {

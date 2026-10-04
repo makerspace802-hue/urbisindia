@@ -18,6 +18,12 @@ import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
+import { friendlyAuthError } from "@/lib/authErrors";
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_PLACEHOLDER,
+  passwordProblem,
+} from "@/lib/passwordRules";
 import logo from "@/assets/logo.svg";
 import {
   ArrowLeft,
@@ -101,9 +107,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? "That email and password combination did not match. Try again, or use an emailed code instead."
-          : "Could not sign in with that password.",
+        friendlyAuthError(
+          err,
+          "That email and password combination did not match. Try again, or use an emailed code instead.",
+        ),
       );
       setPassword("");
     } finally {
@@ -115,6 +122,13 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const handlePasswordSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (step.kind !== "password") return;
+    // Checked here as well as on the server purely to save the round trip and
+    // to keep what they typed on screen; the server stays the authority.
+    const problem = passwordProblem(password);
+    if (problem !== null) {
+      setError(problem);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -127,9 +141,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Could not create an account with that password.",
+        friendlyAuthError(
+          err,
+          "Could not create an account with those details. If you already have one, sign in instead.",
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -148,11 +163,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       await signIn("email-otp", { email });
       setStep({ kind: "otp", email });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not send a code to that address.",
-      );
+      setError(friendlyAuthError(err, "Could not send a code to that address."));
     } finally {
       setIsLoading(false);
     }
@@ -182,9 +193,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       await signIn("google");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Google sign-in did not start.",
-      );
+      setError(friendlyAuthError(err, "Google sign-in did not start."));
       setIsLoading(false);
     }
   };
@@ -196,6 +205,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
    */
   const handleAttachPassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const problem = passwordProblem(password);
+    if (problem !== null) {
+      setError(problem);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -208,11 +222,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setPassword("");
       navigate(redirect);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not set that password.",
-      );
+      setError(friendlyAuthError(err, "Could not set that password."));
     } finally {
       setIsLoading(false);
     }
@@ -232,11 +242,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       await bootstrapFirstAdmin();
       setInfo("Admin rights are now tied to your email. They will follow you to every device and sign-in method.");
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not claim admin rights.",
-      );
+      setError(friendlyAuthError(err, "Could not claim admin rights."));
     } finally {
       setIsLoading(false);
     }
@@ -244,7 +250,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--nb-bg)] px-4 py-8">
-      <Card className="w-full max-w-md rounded-none border-2 border-[var(--nb-ink)] shadow-[6px_6px_0_0_var(--nb-ink)]">
+      <Card className="w-full max-w-md gap-5 rounded-none border-2 border-[var(--nb-ink)] shadow-[6px_6px_0_0_var(--nb-ink)]">
         {step.kind === "choose" && (
           <>
             <CardHeader className="text-center">
@@ -331,11 +337,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <Input
                 name="password"
                 type="password"
-                placeholder="At least 8 characters, with a number"
+                placeholder={PASSWORD_PLACEHOLDER}
                 className="nb-field"
                 value={password}
                 disabled={isLoading}
-                minLength={8}
+                minLength={PASSWORD_MIN_LENGTH}
                 required
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -359,7 +365,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </button>
               </p>
             </CardContent>
-            <CardFooter className="flex-col gap-2">
+            {/* `gap-4`, not `gap-2`: every `.nb-btn` carries a 4px offset
+                shadow (6px on hover) that extends past its own box, so a 8px
+                gap left the shadow touching the button below it. */}
+            <CardFooter className="flex-col gap-4">
               <NbButton type="submit" disabled={isLoading} loading={isLoading}>
                 {step.mode === "signIn" ? "Sign in" : "Create account"}
               </NbButton>
@@ -402,7 +411,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               />
               {error && <ErrorText>{error}</ErrorText>}
             </CardContent>
-            <CardFooter className="flex-col gap-2">
+            <CardFooter className="flex-col gap-4">
               <NbButton type="submit" disabled={isLoading} loading={isLoading}>
                 Send code
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -433,7 +442,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 We sent a 6-digit code to {step.email}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <div className="flex justify-center">
                 <InputOTP
                   value={otp}
@@ -456,7 +465,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </div>
               {error && <ErrorText>{error}</ErrorText>}
             </CardContent>
-            <CardFooter className="flex-col gap-2">
+            <CardFooter className="flex-col gap-4">
               <NbButton
                 type="submit"
                 disabled={isLoading || otp.length !== 6}
@@ -485,7 +494,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             <CardHeader className="text-center">
               <div className="mb-2 flex justify-center">
                 <ShieldCheck
-                  className="h-8 w-8 text-[#10B981]"
+                  className="h-8 w-8 text-[var(--nb-gain)]"
                   strokeWidth={3}
                 />
               </div>
@@ -500,27 +509,27 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               <form id="attach-password" onSubmit={handleAttachPassword} className="space-y-3">
                 <Input
                   type="password"
-                  placeholder="At least 8 characters, with a number"
+                  placeholder={PASSWORD_PLACEHOLDER}
                   className="nb-field"
                   value={password}
                   disabled={isLoading}
-                  minLength={8}
+                  minLength={PASSWORD_MIN_LENGTH}
                   required
                   onChange={(e) => setPassword(e.target.value)}
                 />
                 {error && <ErrorText>{error}</ErrorText>}
                 {info && (
-                  <p className="border-2 border-[#10B981] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[var(--nb-text)]">
+                  <p className="border-2 border-[var(--nb-gain)] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[var(--nb-text)]">
                     {info}
                   </p>
                 )}
               </form>
             </CardContent>
-            <CardFooter className="flex-col gap-2">
+            <CardFooter className="flex-col gap-4">
               <NbButton
                 type="submit"
                 form="attach-password"
-                disabled={isLoading || password.length < 8}
+                disabled={isLoading || password.length < PASSWORD_MIN_LENGTH}
                 loading={isLoading}
               >
                 <Lock className="mr-2 h-4 w-4" />
@@ -632,7 +641,10 @@ function NbButton({
 
 function ErrorText({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-2 border-2 border-[#F43F5E] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[#F43F5E]">
+    <p
+      role="alert"
+      className="border-2 border-[var(--nb-loss)] bg-[var(--nb-alert-bg)] p-2 text-xs font-bold text-[var(--nb-alert-ink)]"
+    >
       {children}
     </p>
   );
