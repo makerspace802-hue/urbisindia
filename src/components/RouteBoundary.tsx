@@ -2,6 +2,20 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Home, RotateCw, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 
+/**
+ * Is this a failed module fetch rather than a genuine crash?
+ *
+ * "Failed to fetch dynamically imported module" means the browser asked for a
+ * chunk the server no longer serves — the tab is running a stale build. It is
+ * common right after a deploy, and after a Convex codegen changes the shape of
+ * `_generated/api`, which every lazily-loaded page imports.
+ */
+function isStaleChunkError(error: Error): boolean {
+  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(
+    error.message ?? "",
+  );
+}
+
 interface Props {
   children: ReactNode;
   /** Shown in the fallback so the visitor knows which view gave up. */
@@ -44,6 +58,20 @@ export class RouteBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
 
+    // A stale chunk cannot be fixed by re-rendering: React.lazy caches the
+    // rejected import, so retrying re-requests the same missing module and
+    // fails identically forever. The only cure is a fresh document load, which
+    // re-resolves every import against the current build.
+    const staleChunk = isStaleChunkError(error);
+
+    const onRetry = () => {
+      if (staleChunk) {
+        window.location.reload();
+        return;
+      }
+      this.setState({ error: null });
+    };
+
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
         <div className="nb-panel max-w-md p-6 text-center">
@@ -54,11 +82,21 @@ export class RouteBoundary extends Component<Props, State> {
           <h2 className="nb-title text-xl">Oops! Something went sideways</h2>
 
           <p className="mt-2 text-sm font-bold text-[var(--nb-text-muted)]">
-            {this.props.label
-              ? `The ${this.props.label} view could not be displayed.`
-              : "This view could not be displayed."}{" "}
-            The rest of URBIS is still working — try again, or head back to the
-            command centre.
+            {staleChunk ? (
+              <>
+                This browser tab is running an older version of URBIS, so a
+                file it needs is no longer served. Reloading picks up the
+                current version.
+              </>
+            ) : (
+              <>
+                {this.props.label
+                  ? `The ${this.props.label} view could not be displayed.`
+                  : "This view could not be displayed."}{" "}
+                The rest of URBIS is still working — try again, or head back to
+                the command centre.
+              </>
+            )}
           </p>
 
           <p className="mt-3 border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-3 py-2 text-left text-[11px] font-bold text-[var(--nb-text-muted)] break-words">
@@ -68,11 +106,11 @@ export class RouteBoundary extends Component<Props, State> {
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
-              onClick={() => this.setState({ error: null })}
+              onClick={onRetry}
               className="nb-btn bg-[#10B981] text-[#04110C]"
             >
               <RotateCw className="size-4" strokeWidth={3} />
-              Try again
+              {staleChunk ? "Reload URBIS" : "Try again"}
             </button>
             <Link to="/" className="nb-btn bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]">
               <Home className="size-4" strokeWidth={3} />

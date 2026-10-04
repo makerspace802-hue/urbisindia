@@ -88,6 +88,26 @@ assert.match(
   "Auth must accept only same-site returnTo values, or it is an open redirect",
 );
 
+// A failed dynamic import leaves a tab running a stale build, and "try again"
+// cannot fix it: React.lazy caches the rejected import, so the retry re-requests
+// the same missing chunk forever. Assert the boundary escalates to a reload.
+const boundary = readFileSync(join(ROOT, "components/RouteBoundary.tsx"), "utf8");
+assert.match(
+  boundary,
+  /Failed to fetch dynamically imported module/,
+  "the error boundary no longer recognises a stale-chunk failure",
+);
+assert.match(
+  boundary,
+  /staleChunk[\s\S]{0,400}window\.location\.reload\(\)/,
+  "a stale chunk must trigger a document reload, not a state-only retry",
+);
+assert.match(
+  boundary,
+  /const staleChunk = isStaleChunkError\(error\)/,
+  "the boundary computes staleChunk but never uses it",
+);
+
 if (findings.length > 0) {
   console.log(`links: ${findings.length} dead end(s) of ${checked} destinations`);
   for (const finding of findings) console.log(`  DEAD ${finding}`);
