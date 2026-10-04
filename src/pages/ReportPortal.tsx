@@ -1,45 +1,35 @@
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "@/lib/locationContext";
+import {
+  categoryByValue,
+  categoriesInGroup,
+  locationLabel,
+  placeFromCensusState,
+  REPORT_CATEGORIES,
+  REPORT_GROUPS,
+  REPORT_PLACES,
+} from "@/lib/reportTaxonomy";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { Check, ChevronUp, ImagePlus, Send, ShieldCheck, Wrench, X } from "lucide-react";
+import {
+  Check,
+  ChevronUp,
+  ImagePlus,
+  LocateFixed,
+  Send,
+  ShieldCheck,
+  Wrench,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 /* --------------------------------------------------------------- config */
 
-const CATEGORIES = [
-  {
-    value: "Extreme Heat / Unshaded Stop",
-    tag: "Heat/Shade",
-    dept: "Parks & Transport Dept",
-    color: "#F43F5E",
-  },
-  {
-    value: "Pothole / Bike Lane Hazard",
-    tag: "Bike Lane",
-    dept: "Roads & Mobility Dept",
-    color: "#06B6D4",
-  },
-  {
-    value: "Overcrowded Transit Hub",
-    tag: "Transit Hub",
-    dept: "Transit Operations Dept",
-    color: "#FBBF24",
-  },
-  {
-    value: "Request Tree Planting",
-    tag: "Tree Planting",
-    dept: "Parks & Forestry Dept",
-    color: "#10B981",
-  },
-];
-
-const DISTRICTS = [
-  "Financial District",
-  "North Suburban Hub",
-  "Industrial Zone 4",
-  "West Tech Corridor",
-];
+/* Categories and locations are NOT defined here — they come from
+   `@/lib/reportTaxonomy`, which is also what the help bot reads. Defining them
+   in this component is what let four invented district names and four
+   one-size-only categories reach production unnoticed. */
 
 const URGENCIES = ["Low", "Medium", "High"] as const;
 type Urgency = (typeof URGENCIES)[number];
@@ -91,6 +81,12 @@ function timeAgo(timestamp: number): string {
 export default function ReportPortal() {
   const { isAuthenticated } = useAuth();
 
+  /** The shared fix. Only offered as a one-tap shortcut — never auto-selected,
+   *  because a ticket silently stamped to the wrong state is worse than one
+   *  extra tap. */
+  const { state: locatedState, busy: locating } = useLocation();
+  const detectedPlace = placeFromCensusState(locatedState);
+
   const liveIssues = useQuery(api.admin.listIssues);
   const isAdmin = useQuery(api.admin.isAdmin);
   const getUploadUrl = useAction(api.admin.uploadUrl);
@@ -106,7 +102,8 @@ export default function ReportPortal() {
 
   // Form state
   const [category, setCategory] = useState("");
-  const [district, setDistrict] = useState("");
+  const [place, setPlace] = useState("");
+  const [landmark, setLandmark] = useState("");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState<Urgency>("Medium");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -167,7 +164,8 @@ export default function ReportPortal() {
 
   const clearForm = () => {
     setCategory("");
-    setDistrict("");
+    setPlace("");
+    setLandmark("");
     setDescription("");
     setUrgency("Medium");
     setFileName(null);
@@ -178,8 +176,8 @@ export default function ReportPortal() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const match = CATEGORIES.find((entry) => entry.value === category);
-    if (!match || !district || description.trim().length < 10) return;
+    const match = categoryByValue(category);
+    if (!match || !place || description.trim().length < 10) return;
 
     const aiTag = `[AI Priority Tag: ${urgency} - Routed to ${match.dept}]`;
     setSubmitting(true);
@@ -203,7 +201,7 @@ export default function ReportPortal() {
         category: match.value,
         tag: match.tag,
         tagColor: match.color,
-        district,
+        district: locationLabel(place, landmark),
         description: description.trim(),
         urgency,
         aiTag,
@@ -341,36 +339,68 @@ export default function ReportPortal() {
                 required
               >
                 <option value="">Select category…</option>
-                {CATEGORIES.map((entry) => (
-                  <option key={entry.value} value={entry.value}>
-                    {entry.value}
-                  </option>
+                {REPORT_GROUPS.map((group) => (
+                  <optgroup key={group} label={group}>
+                    {categoriesInGroup(group).map((entry) => (
+                      <option key={entry.value} value={entry.value}>
+                        {entry.value}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
+              <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--nb-text-dim)]">
+                {REPORT_CATEGORIES.length} categories across{" "}
+                {REPORT_GROUPS.length} departments
+                {category && ` · routed to ${categoryByValue(category)?.dept}`}
+              </p>
             </div>
 
-            {/* District */}
+            {/* Location — a real state or UT, plus an optional landmark */}
             <div>
               <label
-                htmlFor="report-district"
+                htmlFor="report-place"
                 className="mb-2 block text-xs font-black uppercase tracking-wider text-[var(--nb-text-2)]"
               >
-                Location / District
+                State / Union Territory
               </label>
               <select
-                id="report-district"
+                id="report-place"
                 className="nb-field"
-                value={district}
-                onChange={(event) => setDistrict(event.target.value)}
+                value={place}
+                onChange={(event) => setPlace(event.target.value)}
                 required
               >
-                <option value="">Select district…</option>
-                {DISTRICTS.map((entry) => (
+                <option value="">Select your state…</option>
+                {REPORT_PLACES.map((entry) => (
                   <option key={entry} value={entry}>
                     {entry}
                   </option>
                 ))}
               </select>
+
+              {/* Offered, never assumed — a ticket stamped to the wrong state is
+                  worse than one extra tap. */}
+              {detectedPlace && detectedPlace !== place && (
+                <button
+                  type="button"
+                  onClick={() => setPlace(detectedPlace)}
+                  className="nb-chip mt-2 bg-[#06B6D4] text-[#03151A]"
+                >
+                  <LocateFixed className="size-3.5" strokeWidth={3} />
+                  {locating ? "Locating…" : `Use ${detectedPlace}`}
+                </button>
+              )}
+
+              <input
+                id="report-landmark"
+                className="nb-field mt-2"
+                value={landmark}
+                onChange={(event) => setLandmark(event.target.value)}
+                placeholder="Landmark, street or ward (optional)"
+                maxLength={80}
+                aria-label="Landmark, street or ward"
+              />
             </div>
 
             {/* Description */}

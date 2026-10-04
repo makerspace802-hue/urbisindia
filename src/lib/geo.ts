@@ -168,4 +168,20 @@ export function censusName(place: string): string {
   return ALIASES[place] ?? place;
 }
 
+/**
+ * Every place name this module can name, sorted for a picker.
+ *
+ * Exported so a component that offers a choice of location reads the same list
+ * the detector emits and the charts resolve against. A component that re-types
+ * these names is how "Financial District" and "West Tech Corridor" ended up in
+ * the report portal: they are real-looking, and nothing complained.
+ *
+ * These are the names as they stand today, not the 2011 table's spelling, which
+ * is why Delhi and Telangana appear rather than "NCT OF Delhi" and undivided
+ * "Andhra Pradesh". `censusName` maps these into table form for data lookups.
+ */
+export const PLACES: string[] = Object.keys(BOXES).sort((a, b) =>
+  a.localeCompare(b),
+);
+
 export const PLACE_FALLBACK = "India";

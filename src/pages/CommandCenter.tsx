@@ -101,13 +101,7 @@ const CARDS: Card[] = [
   },
 ];
 
-/** Category colours for the live community feed on the dashboard. */
-const TAG_COLORS: Record<string, string> = {
-  "Heat/Shade": "#F43F5E",
-  "Bike Lane": "#06B6D4",
-  "Transit Hub": "#FBBF24",
-  "Tree Planting": "#10B981",
-};
+
 
 /**
  * The whole 1901-2011 series as one line, with this card's census year marked.
@@ -292,7 +286,10 @@ export default function CommandCenter() {
                   <span
                     className="nb-chip"
                     style={{
-                      background: TAG_COLORS[issue.tag] ?? "#94A3B8",
+                      // The colour is stored with the ticket, so a category added
+                      // to the portal shows its own accent here. The old lookup
+                      // table hard-coded four tags and greyed out everything else.
+                      background: issue.tagColor || "#94A3B8",
                       color: "#000000",
                     }}
                   >

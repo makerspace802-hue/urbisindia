@@ -3,11 +3,13 @@ import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { AppHeader } from "./AppHeader";
 import ClockWeatherWidget from "./ClockWeatherWidget";
+import HelpBot from "./HelpBot";
 import { Footer } from "./Footer";
 
 /**
  * Shared shell for the public URBIS pages: persistent header, a draggable
- * clock/weather widget, a short cross-fade between routes, and the footer.
+ * clock/weather widget, the site help bot, a short cross-fade between routes,
+ * and the footer.
  */
 export function AppLayout() {
   const location = useLocation();
@@ -20,6 +22,7 @@ export function AppLayout() {
     <div className="flex min-h-screen flex-col bg-background">
       <AppHeader />
       <ClockWeatherWidget />
+      <HelpBot />
 
       <div className="flex-1">
         <AnimatePresence mode="wait" initial={false}>

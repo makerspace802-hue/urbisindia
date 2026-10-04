@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Antenna beacon -->
+  <rect x="44" y="10" width="8" height="14" fill="#0B0F17"/>
+  <rect x="36" y="2" width="24" height="10" fill="#F43F5E" stroke="#000" stroke-width="4"/>
+
+  <!-- Ear pads -->
+  <rect x="2" y="42" width="14" height="24" fill="#06B6D4" stroke="#000" stroke-width="4"/>
+  <rect x="80" y="42" width="14" height="24" fill="#06B6D4" stroke="#000" stroke-width="4"/>
+
+  <!-- Head shell -->
+  <rect x="14" y="24" width="68" height="54" fill="#E8ECF2" stroke="#000" stroke-width="4"/>
+
+  <!-- Visor band -->
+  <rect x="22" y="32" width="52" height="22" fill="#0B0F17" stroke="#000" stroke-width="4"/>
+
+  <!-- Eyes: one open, one blinking -->
+  <rect x="30" y="38" width="12" height="10" fill="#10B981"/>
+  <rect x="54" y="38" width="12" height="3" fill="#FBBF24"/>
+
+  <!-- Grille mouth -->
+  <rect x="28" y="62" width="40" height="6" fill="#0B0F17"/>
+  <rect x="34" y="72" width="28" height="6" fill="#0B0F17"/>
+
+  <!-- Neck into the button -->
+  <rect x="40" y="78" width="16" height="14" fill="#10B981" stroke="#000" stroke-width="4"/>
+</svg>

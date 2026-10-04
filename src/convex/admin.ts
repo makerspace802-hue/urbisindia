@@ -187,13 +187,42 @@ export const submitIssue = mutation({
     if (!userId) throw new Error("Sign in to submit a report");
     const user = await ctx.db.get(userId);
 
-    // Sequential-ish ticket numbers that stay unique without a counter table.
-    const latest = await ctx.db
+    /**
+     * Next unused ticket number.
+     *
+     * The previous version derived the number from `createdAt % 1000` on the
+     * most recent row. `createdAt` is a millisecond timestamp, so two reports
+     * filed about a second apart produced the SAME ticket — and every later
+     * `by_ticket` lookup calls `.unique()`, which throws on a duplicate. A busy
+     * day would have made upvotes and resolves fail outright.
+     *
+     * Now it walks forward from the highest number actually in use, probing the
+     * unique index each time, so a collision is impossible rather than merely
+     * unlikely.
+     */
+    const recent = await ctx.db
       .query("issues")
       .withIndex("by_created_at")
       .order("desc")
-      .first();
-    const ticket = `#URB-${9000 + (latest?.createdAt ?? 0) % 1000}`;
+      .take(500);
+
+    const highest = recent.reduce((max, row) => {
+      const parsed = Number.parseInt(row.ticket.replace("#URB-", ""), 10);
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 9000);
+
+    const findTaken = async (candidate: string) =>
+      ctx.db
+        .query("issues")
+        .withIndex("by_ticket", (q) => q.eq("ticket", candidate))
+        .unique();
+
+    let number = highest + 1;
+    let ticket = `#URB-${number}`;
+    while (await findTaken(ticket)) {
+      number += 1;
+      ticket = `#URB-${number}`;
+    }
 
     await ctx.db.insert("issues", {
       ticket,
