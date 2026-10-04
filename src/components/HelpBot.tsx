@@ -14,6 +14,7 @@ import {
   type FormEvent,
 } from "react";
 import { useNavigate } from "react-router";
+import { revealStep } from "@/lib/typewriter";
 
 interface Message {
   id: number;
@@ -55,6 +56,22 @@ export default function HelpBot() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([{ ...GREETING, id: 0 }]);
+  /**
+   * The answer currently arriving, and how much of it is on screen. `null`
+   * once a message has fully rendered, so an old answer never re-animates.
+   */
+  const [revealing, setRevealing] = useState<{ id: number; shown: number } | null>(null);
+
+  /**
+   * Read once, in a lazy initialiser rather than an effect, because it is a
+   * property of the visitor's machine and never changes while the panel is
+   * open. Someone who asked for reduced motion gets whole answers instantly.
+   */
+  const [reducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
 
   const navigate = useNavigate();
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -78,13 +95,34 @@ export default function HelpBot() {
       suggestions: reply.suggestions,
     };
     setMessages((previous) => [...previous, you, urbis]);
+    // Starting the reveal here, in the event handler, is what keeps it out of
+    // an effect body. Under reduced motion there is no reveal at all: the
+    // answer is stored complete and renders complete.
+    setRevealing(reducedMotion ? null : { id: urbis.id, shown: 0 });
     setDraft("");
-  }, []);
+  }, [reducedMotion]);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     send(draft);
   };
+
+  /**
+   * The greeting is the first thing anyone reads, so it types too — an instant
+   * wall of text on open is the exact impression this is meant to remove. Only
+   * the very first open streams it; reopening resumes whatever is already in
+   * the transcript. Started in the click handler, not an effect, for the same
+   * reason `send` does it there.
+   */
+  const toggle = useCallback(() => {
+    // Plain read of `open`, not a functional update: an updater must stay pure,
+    // and nesting a setRevealing inside one is exactly the kind of side effect
+    // React double-invokes in StrictMode.
+    if (!open && messages.length === 1) {
+      setRevealing(reducedMotion ? null : { id: 0, shown: 0 });
+    }
+    setOpen(!open);
+  }, [open, messages.length, reducedMotion]);
 
   // Only state that is not already known: focus the field and pin the transcript
   // to the newest message. Neither effect writes React state, so neither can
@@ -96,7 +134,29 @@ export default function HelpBot() {
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages.length, open]);
+  }, [messages.length, open, revealing?.shown]);
+
+  /**
+   * The typewriter. Each step schedules only the next one, so there is exactly
+   * one timer in flight and a newer answer cancels the previous reveal by
+   * changing `revealing` and re-running this effect. The state write happens
+   * inside the timer callback rather than in the effect body, which is what
+   * keeps this a timer rather than a render-phase update.
+   */
+  useEffect(() => {
+    if (revealing === null || reducedMotion) return;
+    const message = messages.find((entry) => entry.id === revealing.id);
+    if (!message) return;
+    // The final step lands the last characters and then stops: the guard is on
+    // `shown` having reached the end, not on the step being the last one.
+    if (revealing.shown >= message.text.length) return;
+
+    const step = revealStep(message.text, revealing.shown);
+    const timer = window.setTimeout(() => {
+      setRevealing({ id: revealing.id, shown: step.shown });
+    }, step.delay);
+    return () => window.clearTimeout(timer);
+  }, [messages, reducedMotion, revealing]);
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +175,18 @@ export default function HelpBot() {
   }, [open]);
 
   const lastIndex = messages.length - 1;
+
+  /** Text as it should read right now — a partial slice while a reply lands. */
+  const visibleText = (message: Message) =>
+    message.from === "urbis" && revealing?.id === message.id
+      ? message.text.slice(0, revealing.shown)
+      : message.text;
+
+  /** True only while this particular answer is still arriving. */
+  const isTyping = (message: Message) =>
+    message.from === "urbis" &&
+    revealing?.id === message.id &&
+    revealing.shown < message.text.length;
 
   return (
     <div className="fixed bottom-4 right-4 z-[90] flex flex-col items-end gap-3">
@@ -166,8 +238,25 @@ export default function HelpBot() {
                 ) : (
                   <div key={message.id} className="max-w-[92%]">
                     <p className="border-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-2.5 py-1.5 text-xs font-semibold leading-relaxed whitespace-pre-line text-[var(--nb-text-2)]">
-                      {message.text}
+                      {/* The full answer is exposed once, up front, while the
+                          animated slice is hidden from assistive tech. Without
+                          this split a screen reader announces the reply one
+                          character at a time, which makes it unusable. */}
+                      <span className="sr-only">{message.text}</span>
+                      <span aria-hidden="true">{visibleText(message)}</span>
+                      {isTyping(message) && <span className="nb-caret" />}
                     </p>
+                    {isTyping(message) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRevealing({ id: message.id, shown: message.text.length })
+                        }
+                        className="nb-chip mt-1.5 bg-[var(--nb-surface-2)] text-[var(--nb-text-2)]"
+                      >
+                        Show all
+                      </button>
+                    )}
                     {message.route && (
                       <button
                         type="button"
@@ -242,7 +331,7 @@ export default function HelpBot() {
       {/* Launcher — square, to match the flat-corner theme */}
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
         aria-label={open ? "Close site help" : "Open site help"}
         aria-expanded={open}
         title="Ask about this site"

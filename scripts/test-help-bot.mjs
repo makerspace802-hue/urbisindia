@@ -36,6 +36,7 @@ buildSync({
       'export * from "./src/lib/geo";',
       'export * from "./src/lib/censusInsights";',
       'export * from "./src/lib/stateTrends";',
+      'export * from "./src/lib/typewriter";',
       "",
     ].join("\n"),
     resolveDir: process.cwd(),
@@ -518,6 +519,98 @@ check("every city in the redirect map points at a real place", () => {
       `${city} produced no population line: ${reply.text.slice(0, 80)}`,
     );
   }
+});
+
+check("no real answer takes long enough to lose the reader", () => {
+  // Measured against the real answers, punctuation pauses included. An earlier
+  // fixed rate took 17s on the longest one, which fails this.
+  for (const question of kb.STARTER_QUESTIONS) {
+    const text = kb.ask(question).text;
+    let shown = 0;
+    let ms = 0;
+    let guard = 0;
+    while (shown < text.length) {
+      const step = kb.revealStep(text, shown);
+      ms += step.delay;
+      shown = step.shown;
+      if (++guard > text.length + 10) assert.fail("never terminated");
+    }
+    assert.ok(
+      ms <= 8000,
+      `"${question}" would take ${(ms / 1000).toFixed(1)}s to type out`,
+    );
+    // And not so fast that it reads as one block appearing.
+    assert.ok(ms >= 1200, `"${question}" types in under a second and reads as instant`);
+  }
+});
+
+check("the typewriter reveal is monotonic and terminates", () => {
+  for (const question of kb.STARTER_QUESTIONS) {
+    const text = kb.ask(question).text;
+    let shown = 0;
+    let guard = 0;
+    for (;;) {
+      const step = kb.revealStep(text, shown);
+      assert.ok(
+        step.shown >= shown,
+        `"${question}" went backwards: ${shown} -> ${step.shown}`,
+      );
+      assert.ok(
+        step.shown <= text.length,
+        `"${question}" overshot: ${step.shown} > ${text.length}`,
+      );
+      assert.ok(step.delay >= 0, "a step had a negative delay");
+      shown = step.shown;
+      if (step.done) break;
+      // A reveal that never terminates would hang the panel forever.
+      if (++guard > text.length + 10) {
+        assert.fail(`"${question}" never finished revealing`);
+      }
+    }
+    assert.equal(shown, text.length, `"${question}" did not land its last character`);
+  }
+});
+
+check("the reveal slows at sentence ends and line breaks", () => {
+  // The pause keys off the character just revealed, so stepping past the
+  // punctuation at index 3 is what carries it: shown 0 -> 4 on "One. Two".
+  const flat = kb.revealStep("a b c d e f g h", 0).delay;
+  const stopped = kb.revealStep("One. Two", 3).delay;
+  const broken = kb.revealStep("One\nTwo", 3).delay;
+  const clause = kb.revealStep("One, Two", 3).delay;
+  assert.ok(stopped > flat, "a full stop should pause longer than a plain character");
+  assert.ok(broken > flat, "a line break should pause longer than a plain character");
+  assert.ok(
+    clause < stopped,
+    "a comma should be a shorter breath than a full stop",
+  );
+  assert.equal(kb.pauseAfter("word.", 5), kb.SENTENCE_PAUSE_MS);
+  assert.equal(kb.pauseAfter("word,", 5), kb.CLAUSE_PAUSE_MS);
+  assert.equal(kb.pauseAfter("wordx", 5), 0, "an ordinary character should not pause");
+});
+
+check("revealing a finished or empty answer is a no-op", () => {
+  assert.deepEqual(kb.revealStep("abc", 3), { shown: 3, delay: 0, done: true });
+  assert.deepEqual(kb.revealStep("abc", 99), { shown: 3, delay: 0, done: true });
+  assert.deepEqual(kb.revealStep("", 0), { shown: 0, delay: 0, done: true });
+  assert.ok(kb.revealStep("", 0).done, "an empty answer must not leave a caret running");
+});
+
+check("the bot streams only its own answers", () => {
+  const source = codeOnly("src/components/HelpBot.tsx");
+  // A visitor's own message must appear the instant they send it.
+  assert.ok(
+    /from === "urbis" && revealing\?\.id === message\.id/.test(source),
+    "the reveal must be gated on the answer being from the bot",
+  );
+  assert.ok(
+    source.includes("prefers-reduced-motion"),
+    "the reveal must respect prefers-reduced-motion",
+  );
+  assert.ok(
+    /aria-hidden="true"/.test(source) && source.includes("sr-only"),
+    "the animated slice must be hidden from assistive tech while the full text stays available",
+  );
 });
 
 if (failures.length === 0) {

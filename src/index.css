@@ -389,6 +389,31 @@
       opacity: 0;
     }
   }
+
+  /* Caret for the help bot's streaming answers. A 2px ink block rather than a
+     hairline bar, so it sits at the same weight as the panel borders. It is
+     rendered only while characters are still arriving, and the reveal itself
+     is skipped entirely under reduced motion — so this animation is simply
+     absent there rather than needing a fallback state. */
+  .nb-caret {
+    display: inline-block;
+    width: 0.5em;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--nb-ink);
+    animation: nb-caret-blink 900ms steps(1, end) infinite;
+  }
+  @keyframes nb-caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    50.01%,
+    100% {
+      opacity: 0;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -404,7 +429,8 @@
     transform: none;
     transition: none;
   }
-  .nb-radar-ring {
+  .nb-radar-ring,
+  .nb-caret {
     animation: none !important;
   }
 }
