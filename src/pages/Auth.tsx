@@ -34,7 +34,7 @@ import {
   Mail,
   ShieldCheck,
 } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
@@ -78,13 +78,38 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const bootstrapFirstAdmin = useMutation(api.identity.bootstrapFirstAdmin);
   const syncProfile = useMutation(api.profile.syncProfileAcrossProviders);
 
+  /**
+   * Does the address on screen already have a password account?
+   *
+   * Empty email => the query returns false immediately, so this is safe to
+   * subscribe to on every step. Read reactively to render the right panel on
+   * the verified screen, and imperatively at submit time to avoid firing a
+   * sign-up that cannot succeed.
+   */
+  const emailOnScreen =
+    step.kind === "password" || step.kind === "verified" ? step.email : "";
+  const existingPasswordAccount = useQuery(
+    api.identity.hasPasswordAccount,
+    { email: emailOnScreen },
+  );
+
+  /**
+   * True while a sign-in is being completed. Without it the auto-redirect in
+   * the effect below fires the instant `isAuthenticated` flips — which is
+   * during the `await` after `signIn` — unmounting this component and racing
+   * the `markPasswordSet` that records the password. That race is why
+   * `accountPasswords` could be missing a row for an account that plainly has
+   * one.
+   */
+  const completingRef = useRef(false);
+
   // Once somebody is verified we hold them on the "finish setting up" screen
   // instead of bouncing them to the app, so `verified` suppresses the
   // auto-redirect below.
   const verified = step.kind === "verified";
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && !verified) {
+    if (!authLoading && isAuthenticated && !verified && !completingRef.current) {
       // Pull profile details across from a sibling row created by a different
       // sign-in provider, so a new provider never looks like a new person.
       void syncProfile().catch(() => undefined);
@@ -98,6 +123,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     if (step.kind !== "password") return;
     setIsLoading(true);
     setError(null);
+    completingRef.current = true;
     try {
       await signIn("password", {
         flow: "signIn",
@@ -114,6 +140,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       );
       setPassword("");
     } finally {
+      completingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -131,6 +158,23 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
     setIsLoading(true);
     setError(null);
+    // The address already has a password account. Re-running sign-up cannot
+    // succeed: @convex-dev/auth throws "Account <email> already exists" as a
+    // plain Error whenever the stored secret does not match, and Convex strips
+    // that message before it reaches the browser. Route to sign-in instead of
+    // attempting a request that is known to fail. This check sits before the
+    // request — and before the redirect guard is raised — so bailing out
+    // leaves nothing to undo.
+    if (existingPasswordAccount === true) {
+      setIsLoading(false);
+      setError(
+        "That email already has an account. Sign in below, or email yourself a code if you have forgotten the password.",
+      );
+      setPassword("");
+      setStep({ kind: "password", mode: "signIn", email: step.email });
+      return;
+    }
+    completingRef.current = true;
     try {
       await signIn("password", {
         flow: "signUp",
@@ -147,6 +191,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         ),
       );
     } finally {
+      completingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -159,12 +204,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     if (!email) return;
     setIsLoading(true);
     setError(null);
+    completingRef.current = true;
     try {
       await signIn("email-otp", { email });
       setStep({ kind: "otp", email });
     } catch (err) {
       setError(friendlyAuthError(err, "Could not send a code to that address."));
     } finally {
+      completingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -175,6 +222,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     if (step.kind !== "otp") return;
     setIsLoading(true);
     setError(null);
+    completingRef.current = true;
     try {
       await signIn("email-otp", { email: step.email, code: otp });
       setOtp("");
@@ -183,6 +231,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError("That code is not right. Check the email and try again.");
       setOtp("");
     } finally {
+      completingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -210,8 +259,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError(problem);
       return;
     }
+    // Same guard as the sign-up handler: this address already has a password,
+    // so re-running sign-up is guaranteed to fail. Offer to continue instead —
+    // the email code just verified means they are already signed in.
+    if (existingPasswordAccount === true) {
+      setError(
+        "This email already has a password, and the one you typed does not match it. Continue below, or sign in with the original.",
+      );
+      setPassword("");
+      return;
+    }
     setIsLoading(true);
     setError(null);
+    completingRef.current = true;
     try {
       await signIn("password", {
         flow: "signUp",
@@ -224,6 +284,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (err) {
       setError(friendlyAuthError(err, "Could not set that password."));
     } finally {
+      completingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -250,17 +311,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--nb-bg)] px-4 py-8">
-      <Card className="w-full max-w-md gap-5 rounded-none border-2 border-[var(--nb-ink)] shadow-[6px_6px_0_0_var(--nb-ink)]">
+      <Card className="w-full max-w-md gap-4 rounded-none border-2 border-[var(--nb-ink)] shadow-[6px_6px_0_0_var(--nb-ink)]">
         {step.kind === "choose" && (
           <>
-            <CardHeader className="text-center">
+            {/* `gap-3`: a 60px logo needs more clearance above the title than the
+              8px the header grid gives its text rows. */}
+            <CardHeader className="gap-3 text-center">
               <div className="flex justify-center">
                 <img
                   src={logo}
                   alt="URBIS India"
                   width={60}
                   height={60}
-                  className="mb-3 cursor-pointer"
+                  className="cursor-pointer"
                   onClick={() => navigate("/")}
                 />
               </div>
@@ -368,7 +431,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             {/* `gap-4`, not `gap-2`: every `.nb-btn` carries a 4px offset
                 shadow (6px on hover) that extends past its own box, so a 8px
                 gap left the shadow touching the button below it. */}
-            <CardFooter className="flex-col gap-4">
+            <CardFooter className="flex-col gap-3">
               <NbButton type="submit" disabled={isLoading} loading={isLoading}>
                 {step.mode === "signIn" ? "Sign in" : "Create account"}
               </NbButton>
@@ -411,7 +474,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               />
               {error && <ErrorText>{error}</ErrorText>}
             </CardContent>
-            <CardFooter className="flex-col gap-4">
+            <CardFooter className="flex-col gap-3">
               <NbButton type="submit" disabled={isLoading} loading={isLoading}>
                 Send code
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -465,7 +528,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
               </div>
               {error && <ErrorText>{error}</ErrorText>}
             </CardContent>
-            <CardFooter className="flex-col gap-4">
+            <CardFooter className="flex-col gap-3">
               <NbButton
                 type="submit"
                 disabled={isLoading || otp.length !== 6}
@@ -489,10 +552,70 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           </form>
         )}
 
-        {step.kind === "verified" && (
-          <>
+        {step.kind === "verified" &&
+          (existingPasswordAccount ? (
+            <>
+              {/*
+                This address already has a password account, so offering to
+                create one is what produced the server error this screen used
+                to show: @convex-dev/auth throws a plain Error when the stored
+                secret does not match, and Convex strips that message before it
+                reaches the browser. The emailed code just verified means the
+                person is signed in, so the useful action is to continue.
+              */}
+              <CardHeader className="text-center">
+                <div className="flex justify-center">
+                  <ShieldCheck
+                    className="h-8 w-8 text-[var(--nb-gain)]"
+                    strokeWidth={3}
+                  />
+                </div>
+                <CardTitle className="text-lg font-black uppercase text-[var(--nb-text)]">
+                  You already have a password
+                </CardTitle>
+                <CardDescription className="text-[var(--nb-text-muted)]">
+                  Use it to sign in from any device — no emailed code needed.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {error && <ErrorText>{error}</ErrorText>}
+                {info && (
+                  <p className="border-2 border-[var(--nb-gain)] bg-[var(--nb-surface-2)] p-2 text-xs font-bold text-[var(--nb-text)]">
+                    {info}
+                  </p>
+                )}
+                <p className="text-center text-xs text-[var(--nb-text-dim)]">
+                  Signed in as {step.email}
+                </p>
+              </CardContent>
+              <CardFooter className="flex-col gap-3">
+                <NbButton onClick={() => navigate(redirect)}>
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Continue to the app
+                </NbButton>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-[var(--nb-text-muted)]"
+                  onClick={() => {
+                    setPassword("");
+                    setError(null);
+                    setStep({
+                      kind: "password",
+                      mode: "signIn",
+                      email: step.email,
+                    });
+                  }}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Sign in with the password
+                </Button>
+              </CardFooter>
+            </>
+          ) : (
+            <>
             <CardHeader className="text-center">
-              <div className="mb-2 flex justify-center">
+              <div className="flex justify-center">
                 <ShieldCheck
                   className="h-8 w-8 text-[var(--nb-gain)]"
                   strokeWidth={3}
@@ -525,7 +648,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 )}
               </form>
             </CardContent>
-            <CardFooter className="flex-col gap-4">
+            <CardFooter className="flex-col gap-3">
               <NbButton
                 type="submit"
                 form="attach-password"
@@ -554,8 +677,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 Skip for now
               </Button>
             </CardFooter>
-          </>
-        )}
+            </>
+          ))}
 
         <p className="border-t-2 border-[var(--nb-ink)] bg-[var(--nb-surface-2)] px-6 py-3 text-center text-[10px] font-bold uppercase tracking-widest text-[var(--nb-text-dim)]">
           Secured by Convex Auth
@@ -643,7 +766,7 @@ function ErrorText({ children }: { children: React.ReactNode }) {
   return (
     <p
       role="alert"
-      className="border-2 border-[var(--nb-loss)] bg-[var(--nb-alert-bg)] p-2 text-xs font-bold text-[var(--nb-alert-ink)]"
+      className="border-2 border-[var(--nb-loss)] bg-[var(--nb-alert-bg)] px-2.5 py-1.5 text-xs font-bold text-[var(--nb-alert-ink)]"
     >
       {children}
     </p>

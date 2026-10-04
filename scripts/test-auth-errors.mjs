@@ -276,17 +276,22 @@ check("server and client say the same words about the same failure", () => {
 
 check("sign-up refuses a weak password before calling the server", () => {
   for (const handler of ["handlePasswordSignUp", "handleAttachPassword"]) {
+    // The window has to reach the actual request. 600 characters was enough
+    // before the existing-account guard was added; it now ends mid-guard, so
+    // indexOf("await signIn(") returned -1 and the ordering check passed or
+    // failed on arithmetic against a value that was never there.
     const at = authPage.indexOf(handler);
     assert.notEqual(at, -1, `${handler} is gone`);
-    const body = authPage.slice(at, at + 600);
+    const body = authPage.slice(at, at + 2000);
     assert.match(
       body,
       /const problem = passwordProblem\(password\)/,
       `${handler} no longer checks the password locally`,
     );
-    // The check has to come before the request, not after it.
+    const firstRequest = body.indexOf("await signIn(");
+    assert.notEqual(firstRequest, -1, `${handler} never calls signIn`);
     assert.ok(
-      body.indexOf("passwordProblem(password)") < body.indexOf("await signIn("),
+      body.indexOf("passwordProblem(password)") < firstRequest,
       `${handler} checks the password only after already calling the server`,
     );
   }
@@ -332,7 +337,7 @@ check("footers leave room for the offset button shadow", () => {
   const footers = authPage.match(/<CardFooter[^>]*>/g) ?? [];
   assert.ok(footers.length >= 4, `expected the step footers, found ${footers.length}`);
   for (const f of footers) {
-    assert.match(f, /gap-4/, `footer is too tight for the button shadow: ${f}`);
+    assert.match(f, /gap-3/, `footer is too tight for the button shadow: ${f}`);
   }
   assert.ok(
     !/CardFooter[^>]*gap-2/.test(authPage),
@@ -364,6 +369,167 @@ check("both themes define the alert pair, and it differs from --nb-loss", () => 
       `${name} theme has no --nb-alert-ink`,
     );
   }
+});
+
+/* ==========================================================================
+   5. A sign-up for an address that already has a password is not attempted
+
+   This is the second half of the "Server Error" report. Convex Auth throws
+   `Account <email> already exists` as a plain Error when the stored secret
+   does not match, so a repeat sign-up is guaranteed to fail and the failure
+   is unreadable. The screen now asks first and routes to sign-in.
+   ========================================================================== */
+
+const identity = flat("src/convex/identity.ts");
+
+check("the backend can answer whether an email already has a password", () => {
+  assert.match(
+    identity,
+    /export const hasPasswordAccount = query\(/,
+    "identity.ts no longer exposes hasPasswordAccount",
+  );
+  // The authoritative source is Convex Auth's own table, which is in this
+  // deployment's schema via `authTables`. `accountPasswords` is bookkeeping
+  // written after a sign-up, so it can only ever be the fallback.
+  assert.match(
+    identity,
+    /\.query\("authAccounts"\)/,
+    "hasPasswordAccount does not read authAccounts",
+  );
+  assert.match(
+    identity,
+    /\.query\("accountPasswords"\)/,
+    "hasPasswordAccount lost its fallback",
+  );
+  // The lookup must be by the password provider, not by any other kind of row.
+  assert.match(
+    identity,
+    /q\.eq\("provider", "password"\)/,
+    "hasPasswordAccount no longer filters on the password provider",
+  );
+});
+
+check("sign-up refuses to fire for an address that already has a password", () => {
+  const at = authPage.indexOf("handlePasswordSignUp");
+  const body = authPage.slice(at, at + 1600);
+  assert.match(
+    body,
+    /if \(existingPasswordAccount === true\)/,
+    "handlePasswordSignUp no longer checks for an existing account first",
+  );
+  assert.ok(
+    body.indexOf("existingPasswordAccount === true") < body.indexOf('await signIn("password"'),
+    "the existing-account check runs only after the sign-up request has been sent",
+  );
+  // The escape hatch must be sign-in, not a dead end.
+  assert.match(
+    body,
+    /mode: "signIn"/,
+    "sign-up no longer routes an existing address to sign-in",
+  );
+});
+
+check("the verified screen offers to continue instead of re-creating", () => {
+  assert.match(
+    authPage,
+    /existingPasswordAccount \? \(/,
+    "the verified screen no longer branches on whether a password exists",
+  );
+  assert.match(
+    authPage,
+    /You already have a password/,
+    "the already-set branch lost its heading",
+  );
+  // And the branch that still offers to set one must not be the default.
+  const formBranch = authPage.slice(authPage.indexOf("existingPasswordAccount ? ("));
+  assert.match(
+    formBranch,
+    /handleAttachPassword/,
+    "the set-password form is unreachable from the verified screen",
+  );
+});
+
+check("recording a password is not raced by the auto-redirect", () => {
+  assert.match(
+    authPage,
+    /const completingRef = useRef\(false\)/,
+    "the redirect guard is gone, so markPasswordSet races navigation again",
+  );
+  // The effect must consult it.
+  const effect = authPage.slice(
+    authPage.indexOf("useEffect(() => {"),
+    authPage.indexOf("useEffect(() => {") + 500,
+  );
+  assert.match(
+    effect,
+    /!completingRef\.current/,
+    "the auto-redirect no longer respects the completing guard",
+  );
+  // Every password/OTP handler that signs in must set it, and clear it again.
+  // Five handlers sign in (password sign-in, sign-up, send code, verify code,
+  // attach password). Each raises the guard only once it has committed to
+  // making the request — the two early returns that bail out on an existing
+  // account happen before that point, so they leave nothing to undo — and
+  // clears it in its finally.
+  const setCount = authPage.match(/completingRef\.current = true/g)?.length ?? 0;
+  const clearCount = authPage.match(/completingRef\.current = false/g)?.length ?? 0;
+  assert.equal(
+    setCount,
+    5,
+    `expected all five sign-in handlers to raise the guard, found ${setCount} — ` +
+      "a handler that signs in without raising it still races markPasswordSet",
+  );
+  assert.equal(
+    clearCount,
+    setCount,
+    `expected one clear per raise, found ${clearCount} clears for ${setCount} raises — ` +
+      "a guard left raised blocks the auto-redirect for the rest of the session",
+  );
+});
+
+/* ==========================================================================
+   6. The email-OTP provider does not destroy its own error
+
+   Its catch block was `throw new Error(JSON.stringify(error))`. An Axios error
+   cannot be serialised — `request` and `config` are circular — so that line
+   threw a TypeError of its own, and the plain `Error` that escaped had its
+   message replaced by Convex with a request-id wrapper. A failed email send
+   was therefore completely undiagnosable from either the browser or the logs.
+   ========================================================================== */
+
+const emailOtp = flat("src/convex/auth/emailOtp.ts");
+
+check("a failed OTP email raises a ConvexError the browser can read", () => {
+  assert.match(
+    emailOtp,
+    /import \{ ConvexError \} from "convex\/values"/,
+    "emailOtp.ts does not import ConvexError",
+  );
+  const catchBody = emailOtp.slice(emailOtp.indexOf("} catch (error) {"));
+  assert.match(
+    catchBody,
+    /throw new ConvexError\(/,
+    "the OTP email failure is raised as a plain Error again, so its message " +
+      "will be replaced by a request-id wrapper",
+  );
+});
+
+check("the OTP provider no longer serialises an Axios error", () => {
+  assert.ok(
+    !/JSON\.stringify\(error\)/.test(emailOtp),
+    "JSON.stringify(error) is back in the OTP catch block; an Axios error is " +
+      "circular, so this throws a TypeError and loses the original cause",
+  );
+});
+
+check("a failed OTP send is recorded in the deployment logs", () => {
+  assert.match(
+    emailOtp,
+    /console\.error\(/,
+    "the OTP catch block logs nothing, so an email failure is invisible server-side",
+  );
+  // The detail must be the flattened subset, not the error object itself.
+  assert.match(emailOtp, /axios\.isAxiosError\(error\)/);
 });
 
 /* -------------------------------------------------------------------------- */

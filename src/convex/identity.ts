@@ -269,6 +269,52 @@ export const markPasswordSet = mutation({
 });
 
 /**
+ * Does this address already have a password account?
+ *
+ * The sign-up screen needs this before it can safely offer "create an
+ * account". @convex-dev/auth's `createAccountFromCredentials` only throws when
+ * the address exists AND the supplied password does not match the stored one —
+ * when they match it silently signs in — so a failed sign-up always means "this
+ * email is taken with a different password". But it throws a plain `Error`,
+ * which Convex replaces with an opaque request-id wrapper, so the reason never
+ * reaches the browser and the person is left staring at a server error for
+ * what is a completely ordinary situation.
+ *
+ * Asking here instead means the screen can route them to sign-in before
+ * attempting a request that cannot succeed. The authoritative answer is
+ * Convex Auth's own `authAccounts` table, which is part of this deployment's
+ * schema via `authTables`; `accountPasswords` is only our bookkeeping copy,
+ * written after a successful sign-up, so it is the fallback rather than the
+ * source of truth.
+ */
+export const hasPasswordAccount = query({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = normaliseEmail(args.email);
+    if (!email) return false;
+
+    try {
+      const account = await ctx.db
+        .query("authAccounts")
+        .withIndex("providerAndAccountId", (q) =>
+          q.eq("provider", "password").eq("providerAccountId", email),
+        )
+        .first();
+      if (account !== null) return true;
+    } catch {
+      // The table or its index is not what this version of @convex-dev/auth
+      // exposes. Fall through to our own record rather than failing a read.
+    }
+
+    const record = await ctx.db
+      .query("accountPasswords")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+    return record !== null;
+  },
+});
+
+/**
  * What the auth screen needs to know about the signed-in account, so it can
  * offer the right next step (set a password, or just go sign in).
  */
